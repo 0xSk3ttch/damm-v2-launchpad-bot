@@ -97,6 +97,30 @@ export class DiscordNotifier {
         }
     }
 
+    async sendPoolAlert(embed: any): Promise<void> {
+        try {
+            const payload: DiscordWebhookPayload = {
+                embeds: [embed]
+            };
+
+            const response = await fetch(this.webhookUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Discord webhook failed: ${response.status} ${response.statusText}`);
+            }
+
+            console.log('📢 Pool alert Discord notification sent successfully');
+        } catch (error) {
+            console.error('❌ Failed to send pool alert Discord notification:', error);
+        }
+    }
+
     private async getMetadataAddress(mintAddress: string): Promise<PublicKey> {
         // Metaplex metadata program ID
         const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
