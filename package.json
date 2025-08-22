@@ -22,6 +22,7 @@
     "test:check-pool": "ts-node src/test.ts check-pool",
     "test:missed-migration": "ts-node src/test.ts missed-migration",
     "test:deep-scan": "ts-node src/test.ts deep-scan",
+    "test:damm-detection": "ts-node test-damm-detection.ts",
     "monitor": "ts-node src/test.ts websocket",
     "integrated-flow": "ts-node src/test.ts integrated-flow",
     "clean": "rm -rf dist",
@@ -42,13 +43,15 @@
     "@jup-ag/api": "^6.0.44",
     "@solana/spl-token": "^0.3.9",
     "bs58": "^5.0.0",
-    "tweetnacl": "^1.0.3"
+    "tweetnacl": "^1.0.3",
+    "ws": "^8.14.2"
   },
   "devDependencies": {
     "@meteora-ag/cp-amm-sdk": "^1.1.1",
     "@solana/web3.js": "^1.98.4",
     "@types/bs58": "^4.0.1",
     "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.10",
     "bottleneck": "^2.19.5",
     "dotenv": "^17.2.1",
     "ts-node": "^10.9.0",
