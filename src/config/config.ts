@@ -12,6 +12,7 @@ export interface Config {
     raydiumAmmProgramId: string;
     solAmount: number; // Amount of SOL to use for liquidity (per side)
     slippageBps: number; // Slippage tolerance in basis points
+    addLiquidity: boolean; // Whether to automatically add liquidity to matching pools
 }
 
 export function loadConfig(): Config {
@@ -26,5 +27,6 @@ export function loadConfig(): Config {
         raydiumAmmProgramId: process.env.RAYDIUM_AMM_PROGRAM_ID || '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
         solAmount: parseFloat(process.env.SOL_AMOUNT || '0.002'), // Default to 0.002 SOL per side
         slippageBps: parseInt(process.env.SLIPPAGE_BPS || '2000'), // Default to 20% slippage
+        addLiquidity: process.env.ADD_LIQUIDITY === 'true', // Default to false for safety
     };
 }

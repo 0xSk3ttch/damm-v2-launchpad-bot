@@ -39,7 +39,8 @@ async function main(): Promise<void> {
         checkIntervalMs: 20000, // 20 seconds
         discordWebhookUrl: 'https://discord.com/api/webhooks/1408201047725576212/RInFt1ytBIkaMQibeACRdjqPDIMW0JBHDztxoYE6_u4pdHPOWlDgQ2SiVZ1SL4aABgfD',
         wallet,
-        swapAmountSol: cfg.solAmount // Use configured SOL amount per token
+        swapAmountSol: cfg.solAmount, // Use configured SOL amount per token
+        addLiquidity: cfg.addLiquidity // Use configured value for liquidity addition
     });
 
     // --- Migration Monitor ---
@@ -79,9 +80,10 @@ async function main(): Promise<void> {
     console.log('✅ Migration monitor running.');
     console.log('✅ DAMM pool monitor running.');
     console.log('📢 Discord notifications enabled (with proper token names)');
-    console.log('🎯 Workflow: Migration Detection → Discord Alert → Add to DAMM Monitor → Pool Monitoring → Auto Token Purchase');
+    console.log('🎯 Workflow: Migration Detection → Discord Alert → Add to DAMM Monitor → Pool Monitoring → Auto Token Purchase → Auto Liquidity Addition');
     console.log('⏰ Migration tokens are watched for DAMM pools for 7 minutes');
     console.log(`💰 Automatic token purchase: ${cfg.solAmount * 2} SOL per matching pool`);
+    console.log(`🏊 Automatic liquidity addition: ${cfg.solAmount * 2} SOL equivalent (${cfg.solAmount} SOL + ${cfg.solAmount} tokens)`);
     console.log(`🔑 Bot Wallet: ${walletAddress.slice(0, 8)}...${walletAddress.slice(-8)}`);
     console.log('🔥 this is a firehose');
 

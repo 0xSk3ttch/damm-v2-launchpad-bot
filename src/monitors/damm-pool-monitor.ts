@@ -4,6 +4,7 @@ import { MigrationTracker } from '../services/migration-tracker';
 import { PoolCriteriaChecker } from '../services/pool-criteria-checker';
 import { DiscordPoolNotifier } from '../services/discord-pool-notifier';
 import { JupiterSwapService } from '../services/jupiter-swap-service';
+import { DammLiquidityService } from '../services/damm-liquidity-service';
 
 export interface DammPoolMonitorOptions {
   connection: Connection;
@@ -11,6 +12,7 @@ export interface DammPoolMonitorOptions {
   discordWebhookUrl: string;
   wallet: any; // Wallet for executing swaps
   swapAmountSol?: number; // Amount of SOL to swap (default 0.02)
+  addLiquidity?: boolean; // Whether to automatically add liquidity to matching pools
 }
 
 export class DammPoolMonitor {
@@ -20,9 +22,11 @@ export class DammPoolMonitor {
   private readonly criteriaChecker: PoolCriteriaChecker;
   private readonly discordNotifier: DiscordPoolNotifier;
   private readonly jupiterService: JupiterSwapService;
+  private readonly liquidityService: DammLiquidityService;
   private readonly checkIntervalMs: number;
   private readonly wallet: any;
   private readonly swapAmountSol: number;
+  private readonly addLiquidity: boolean;
   
   private readonly DAMM_V2_PROGRAM = new PublicKey("cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG");
   private readonly POOL_ACCOUNT_SIZE = 1112;
@@ -40,9 +44,11 @@ export class DammPoolMonitor {
     this.criteriaChecker = new PoolCriteriaChecker();
     this.discordNotifier = new DiscordPoolNotifier(options.discordWebhookUrl);
     this.jupiterService = new JupiterSwapService(options.connection);
+    this.liquidityService = new DammLiquidityService(options.connection);
     this.checkIntervalMs = options.checkIntervalMs || 20000; // Default 20 seconds
     this.wallet = options.wallet;
     this.swapAmountSol = options.swapAmountSol || 0.01; // 0.01 SOL per token (reduced to ensure sufficient balance for fees)
+    this.addLiquidity = options.addLiquidity || false; // Default to false for safety
     
     // Add a test token for debugging (remove this in production)
     this.migrationTracker.addToken("6TEvxqhg4PzkkTSDZShQRymstpCHWUd2SVMV6dFS8bZY");
@@ -130,6 +136,42 @@ export class DammPoolMonitor {
     }
   }
 
+  // Execute liquidity addition to DAMM pool
+  private async executeLiquidityAddition(poolAddress: string, tokenMint: string, _pool: any): Promise<void> {
+    try {
+      console.log(`🏊 Executing liquidity addition to DAMM pool: ${poolAddress}`);
+      
+      // Wait a bit for the token purchase to settle
+      console.log(`⏳ Waiting 5 seconds for token purchase to settle...`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Add liquidity using the liquidity service
+      const liquidityOptions = {
+        poolAddress,
+        tokenMint,
+        solAmount: this.swapAmountSol, // Use the same amount as the swap
+        wallet: this.wallet
+      };
+      
+      const result = await this.liquidityService.addLiquidity(liquidityOptions);
+      
+      if (result.success) {
+        console.log(`✅ Liquidity added successfully to pool ${poolAddress}`);
+        if (result.transactionSignature) {
+          console.log(`   Transaction: ${result.transactionSignature}`);
+        }
+        if (result.positionAddress) {
+          console.log(`   Position: ${result.positionAddress}`);
+        }
+      } else {
+        console.error(`❌ Failed to add liquidity: ${result.error}`);
+      }
+      
+    } catch (error) {
+      console.error(`❌ Error executing liquidity addition:`, error);
+    }
+  }
+
   private startMonitoringLoop(): void {
     this.checkInterval = setInterval(async () => {
       if (this.isRunning) {
@@ -199,6 +241,11 @@ export class DammPoolMonitor {
             
             // Execute automatic token purchase
             await this.executeTokenPurchase(tokenMint, pool);
+            
+            // Add liquidity to the pool if enabled
+            if (this.addLiquidity) {
+              await this.executeLiquidityAddition(pubkey.toBase58(), tokenMint, pool);
+            }
             
             // Remove token from pending list since we found a pool
             this.migrationTracker.removeToken(tokenMint);
