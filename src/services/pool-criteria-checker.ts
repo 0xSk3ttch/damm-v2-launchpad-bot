@@ -54,18 +54,37 @@ export class PoolCriteriaChecker {
   async meetsAllCriteria(pool: any, migratedTokenMint: PublicKey): Promise<boolean> {
     const criteria = await this.checkPoolCriteria(pool, migratedTokenMint);
     
-    // Log detailed criteria results
+    // Log detailed criteria results with pool info
+    console.log(`   🔍 Pool Analysis for ${pool.tokenAMint.toString()}/${pool.tokenBMint.toString()}:`);
+    
     if (!criteria.hasWSOL && !criteria.hasSOL) {
       console.log(`   ❌ Pool doesn't contain WSOL or SOL`);
+    } else {
+      console.log(`   ✅ Contains SOL/WSOL`);
     }
+    
     if (!criteria.hasMigratedToken) {
       console.log(`   ❌ Pool doesn't contain migrated token`);
+    } else {
+      console.log(`   ✅ Contains migrated token`);
     }
+    
     if (!criteria.feesInQuoteToken) {
       console.log(`   ❌ Fees not paid in quote token (SOL/WSOL)`);
+    } else {
+      console.log(`   ✅ Fees in quote token`);
     }
+    
     if (!criteria.hasLinearSchedule) {
       console.log(`   ❌ Not a linear fee schedule`);
+      // Log more details about the fee structure
+      if (pool.poolFees) {
+        console.log(`   📊 Pool fees found:`, JSON.stringify(pool.poolFees, null, 2));
+      } else {
+        console.log(`   📊 No pool fees data found`);
+      }
+    } else {
+      console.log(`   ✅ Linear fee schedule`);
     }
     
     const allMet = criteria.hasWSOL || criteria.hasSOL;

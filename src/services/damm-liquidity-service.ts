@@ -52,12 +52,29 @@ export class DammLiquidityService {
 
       console.log(`💰 Wallet balance: ${(solBalance / 1e9).toFixed(3)} SOL, Required: ${(requiredSol / 1e9).toFixed(3)} SOL`);
 
-      // Check if we have the token
-      const tokenBalance = await this.checkTokenBalance(options.tokenMint, walletPubkey);
+      // Check if we have the token with retry mechanism
+      let tokenBalance = await this.checkTokenBalance(options.tokenMint, walletPubkey);
       if (!tokenBalance) {
-        const error = `Token ${options.tokenMint} not found in wallet`;
-        console.error(`❌ ${error}`);
-        return { success: false, error };
+        console.log(`⏳ Token not found immediately, waiting for settlement...`);
+        
+        // Wait up to 30 seconds for the token to appear (Jupiter swaps can take time)
+        for (let attempt = 1; attempt <= 6; attempt++) {
+          const waitTime = attempt * 5000; // 5s, 10s, 15s, 20s, 25s, 30s
+          console.log(`   Attempt ${attempt}/6: Waiting ${waitTime/1000} seconds...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          
+          tokenBalance = await this.checkTokenBalance(options.tokenMint, walletPubkey);
+          if (tokenBalance) {
+            console.log(`✅ Token found after ${waitTime/1000} seconds!`);
+            break;
+          }
+          
+          if (attempt === 6) {
+            const error = `Token ${options.tokenMint} not found in wallet after 30 seconds`;
+            console.error(`❌ ${error}`);
+            return { success: false, error };
+          }
+        }
       }
 
       console.log(`🪙 Token balance: ${tokenBalance} tokens`);
@@ -94,68 +111,87 @@ export class DammLiquidityService {
       }
 
       // Calculate amounts based on the token we want to use
-      // We'll use a reasonable amount that won't exceed our balance
-      const targetTokenAmount = Math.min(tokenBalance, Math.floor(options.solAmount * 1000000)); // Use 1M tokens per SOL as example
+      // Use 100% of the tokens we bought for the SOL amount we spent
+      const targetTokenAmount = tokenBalance!; // Use 100% of our token balance (we know it's not null here)
       const solAmount = Math.floor(options.solAmount * 1e9); // Convert to lamports
 
       console.log(`📊 Liquidity amounts calculated:`);
       console.log(`   Target token amount: ${targetTokenAmount}`);
       console.log(`   SOL amount: ${solAmount} lamports (${options.solAmount} SOL)`);
+      
+      // The issue: Meteora SDK calculates its own amounts, we need to let it do that
+      // Instead of forcing our amounts, we should use the SDK's calculation methods
 
       // Get wallet keypair for signing transactions
       const keypair = options.wallet.getKeypair ? options.wallet.getKeypair() : options.wallet;
       
-      console.log(`🏊 Creating position and adding liquidity with REAL Meteora SDK...`);
+      // 🎯 BREAKTHROUGH: Now using the REAL DAMM v2 SDK with proper methods!
+      // Based on the official documentation: https://github.com/MeteoraAg/damm-v2-sdk/blob/main/docs.md#createPosition
+      console.log(`🏊 Using REAL DAMM v2 SDK: createPosition + addLiquidity approach!`);
       
-      // Use the simple, working approach: createPositionAndAddLiquidity
-      const positionNft = Keypair.generate(); // Generate new position NFT keypair
+      // Use the working approach: createPositionAndAddLiquidity in a single transaction
+      console.log(`🏗️  Using single transaction approach: createPositionAndAddLiquidity...`);
+      
+      // Generate new position NFT keypair
+      const positionNft = Keypair.generate();
       console.log(`   Position NFT: ${positionNft.publicKey.toString()}`);
       
-      const result = await this.cpAmm.createPositionAndAddLiquidity({
+      // Calculate liquidity delta using the working method
+      console.log(`📊 Calculating liquidity delta using getLiquidityDelta...`);
+      const liquidityDelta = this.cpAmm.getLiquidityDelta({
+        maxAmountTokenA: new BN(targetTokenAmount),
+        maxAmountTokenB: new BN(solAmount),
+        sqrtPrice: poolState.sqrtPrice,
+        sqrtMinPrice: poolState.sqrtMinPrice,
+        sqrtMaxPrice: poolState.sqrtMaxPrice,
+        tokenAInfo: undefined, // No special token info needed
+      });
+      
+      console.log(`📊 Liquidity delta calculated: ${liquidityDelta.toString()}`);
+      
+      // Create position and add liquidity in a single transaction
+      const createPositionAndAddLiquidityTx = await this.cpAmm.createPositionAndAddLiquidity({
         owner: walletPubkey,
         pool: poolPubkey,
         positionNft: positionNft.publicKey,
-        liquidityDelta: new BN(targetTokenAmount),
-        maxAmountTokenA: new BN(isTokenA ? targetTokenAmount : solAmount),
-        maxAmountTokenB: new BN(isTokenB ? targetTokenAmount : solAmount),
-        tokenAAmountThreshold: new BN(Math.floor(targetTokenAmount * 0.9)), // Allow 10% slippage
-        tokenBAmountThreshold: new BN(Math.floor(solAmount * 0.9)), // Allow 10% slippage
+        liquidityDelta,
+        maxAmountTokenA: new BN(targetTokenAmount),
+        maxAmountTokenB: new BN(solAmount),
+        tokenAAmountThreshold: new BN(targetTokenAmount), // Accept the full amount
+        tokenBAmountThreshold: new BN(solAmount), // Accept the full amount
         tokenAMint: poolState.tokenAMint,
         tokenBMint: poolState.tokenBMint,
         tokenAProgram: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
-        tokenBProgram: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+        tokenBProgram: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'),
       });
-
-      console.log(`📝 Signing and sending liquidity transaction...`);
       
-      // Sign and send the transaction - the result should be a transaction object
-      if (result && typeof result.sign === 'function') {
-        // Get recent blockhash before signing
-        const { blockhash } = await this.connection.getLatestBlockhash();
-        result.recentBlockhash = blockhash;
-        result.feePayer = walletPubkey;
-        
-        // Sign with both the wallet and the position NFT keypair
-        result.sign(keypair, positionNft);
-        const signature = await sendAndConfirmTransaction(
-          this.connection,
-          result,
-          [keypair, positionNft],
-          { commitment: 'confirmed' }
-        );
-        
-        console.log(`🎉 SUCCESS! Real liquidity added to DAMM pool!`);
-        console.log(`   Transaction: ${signature}`);
-        console.log(`   🔗 View transaction: https://explorer.solana.com/tx/${signature}`);
+      console.log(`📝 Signing and sending createPositionAndAddLiquidity transaction...`);
+      
+      // Sign and send the transaction
+      const { blockhash } = await this.connection.getLatestBlockhash();
+      createPositionAndAddLiquidityTx.recentBlockhash = blockhash;
+      createPositionAndAddLiquidityTx.feePayer = walletPubkey;
+      createPositionAndAddLiquidityTx.sign(keypair, positionNft);
+      
+      const signature = await sendAndConfirmTransaction(
+        this.connection,
+        createPositionAndAddLiquidityTx,
+        [keypair, positionNft],
+        { commitment: 'confirmed' }
+      );
+      
+      console.log(`🎉 SUCCESS! Position created and liquidity added to DAMM pool!`);
+      console.log(`   Position NFT: ${positionNft.publicKey.toString()}`);
+      console.log(`   Liquidity Added: ${targetTokenAmount} tokens + ${solAmount} lamports`);
+      console.log(`   Transaction: ${signature}`);
+      console.log(`   🔗 View position: https://explorer.solana.com/address/${positionNft.publicKey.toString()}`);
+      console.log(`   🔗 View transaction: https://explorer.solana.com/tx/${signature}`);
 
-        return {
-          success: true,
-          transactionSignature: signature,
-          positionAddress: 'Position created and liquidity added in single transaction'
-        };
-      } else {
-        throw new Error('Unexpected result type from createPositionAndAddLiquidity');
-      }
+      return {
+        success: true,
+        transactionSignature: signature,
+        positionAddress: positionNft.publicKey.toString()
+      };
 
     } catch (error: any) {
       console.error(`❌ Error adding liquidity to DAMM pool:`, error);
@@ -182,6 +218,8 @@ export class DammLiquidityService {
       return null; // Token account doesn't exist
     }
   }
+
+
 
   /**
    * Ensure token accounts exist for the wallet

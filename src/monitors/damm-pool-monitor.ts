@@ -37,6 +37,7 @@ export class DammPoolMonitor {
   private checkInterval: NodeJS.Timeout | null = null;
   private seenPools = new Set<string>();
 
+
   constructor(options: DammPoolMonitorOptions) {
     this.connection = options.connection;
     this.cpAmm = new CpAmm(options.connection);
@@ -47,12 +48,11 @@ export class DammPoolMonitor {
     this.liquidityService = new DammLiquidityService(options.connection);
     this.checkIntervalMs = options.checkIntervalMs || 20000; // Default 20 seconds
     this.wallet = options.wallet;
-    this.swapAmountSol = options.swapAmountSol || 0.01; // 0.01 SOL per token (reduced to ensure sufficient balance for fees)
+    this.swapAmountSol = options.swapAmountSol || 0.01; // 0.01 SOL per token (reduced to ensure sufficient balance for fees
     this.addLiquidity = options.addLiquidity || false; // Default to false for safety
     
-    // Add a test token for debugging (remove this in production)
-    this.migrationTracker.addToken("6TEvxqhg4PzkkTSDZShQRymstpCHWUd2SVMV6dFS8bZY");
-    console.log('🧪 Added test token for debugging: 6TEvxqhg4PzkkTSDZShQRymstpCHWUd2SVMV6dFS8bZY');
+    // System is now production-ready - only responds to real Pump.fun migrations
+    console.log('🚀 Production mode: Only real migrations will trigger pool monitoring');
   }
 
   async start(): Promise<void> {
@@ -167,7 +167,7 @@ export class DammPoolMonitor {
         console.error(`❌ Failed to add liquidity: ${result.error}`);
       }
       
-    } catch (error) {
+    } catch (error: any) {
       console.error(`❌ Error executing liquidity addition:`, error);
     }
   }
@@ -239,12 +239,17 @@ export class DammPoolMonitor {
             // Send Discord notification
             await this.discordNotifier.sendPoolFoundAlert(pubkey.toBase58(), tokenMint, pool);
             
-            // Execute automatic token purchase
-            await this.executeTokenPurchase(tokenMint, pool);
-            
-            // Add liquidity to the pool if enabled
-            if (this.addLiquidity) {
-              await this.executeLiquidityAddition(pubkey.toBase58(), tokenMint, pool);
+            try {
+              // Execute automatic token purchase
+              await this.executeTokenPurchase(tokenMint, pool);
+              
+              // Add liquidity to the pool if enabled
+              if (this.addLiquidity) {
+                await this.executeLiquidityAddition(pubkey.toBase58(), tokenMint, pool);
+              }
+              
+            } catch (error: any) {
+              console.error(`❌ Error processing token ${tokenMint}:`, error.message);
             }
             
             // Remove token from pending list since we found a pool

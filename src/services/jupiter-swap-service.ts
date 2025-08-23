@@ -39,40 +39,41 @@ export class JupiterSwapService {
     }
   }
 
-  // Monitor a specific transaction with detailed tracking
-  private async monitorTransaction(signature: string): Promise<void> {
-    console.log(`🔍 Starting detailed transaction monitoring for: ${signature}`);
-    
-    let attempts = 0;
-    const maxAttempts = 12; // Monitor for up to 60 seconds (12 * 5 seconds)
-    
-    while (attempts < maxAttempts) {
-      try {
-        const status = await this.connection.getSignatureStatus(signature);
-        console.log(`   Attempt ${attempts + 1}/${maxAttempts} - Status: ${status.value?.confirmationStatus || 'unknown'}`);
+  // Check network health and congestion
+  private async checkNetworkHealth(): Promise<void> {
+    try {
+      console.log('🔍 Network Health Check:');
+      
+      // Get recent block production rate
+      const recentSlots = await this.connection.getRecentPerformanceSamples(4);
+      if (recentSlots.length > 0) {
+        const avgSlotTime = recentSlots.reduce((sum, sample) => sum + (sample.numTransactions || 0), 0) / recentSlots.length;
+        console.log(`   Average transactions per slot: ${avgSlotTime.toFixed(0)}`);
         
-        if (status.value?.confirmationStatus === 'confirmed' || status.value?.confirmationStatus === 'finalized') {
-          console.log(`✅ Transaction confirmed after ${attempts + 1} attempts (${(attempts + 1) * 5} seconds)`);
-          return;
+        if (avgSlotTime < 1000) { // Low transaction count may indicate congestion
+          console.log('⚠️  Network appears congested, transactions may take longer');
+        } else {
+          console.log('✅ Network appears healthy');
         }
-        
-        if (status.value?.err) {
-          console.log(`❌ Transaction failed: ${JSON.stringify(status.value.err)}`);
-          return;
-        }
-        
-        attempts++;
-        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds between checks
-        
-      } catch (error: any) {
-        console.log(`⚠️  Error monitoring transaction: ${error.message}`);
-        attempts++;
-        await new Promise(resolve => setTimeout(resolve, 5000));
       }
+      
+      // Check recent transaction success rate
+      try {
+        const recentBlocks = await this.connection.getBlocks(
+          await this.connection.getSlot() - 10,
+          await this.connection.getSlot()
+        );
+        console.log(`   Recent blocks: ${recentBlocks.length} blocks in last 10 slots`);
+      } catch (error) {
+        console.log('   Recent blocks: Unable to fetch (this is normal)');
+      }
+      
+    } catch (error: any) {
+      console.log('⚠️  Network health check failed:', error.message);
     }
-    
-    console.log(`⏰ Transaction monitoring timeout after ${maxAttempts * 5} seconds`);
   }
+
+
 
   async executeSwap(options: SwapOptions, wallet: any): Promise<string> {
     const maxRetries = 3;
@@ -102,6 +103,9 @@ export class JupiterSwapService {
 
         // Check RPC performance before swap
         await this.checkRpcPerformance();
+        
+        // Check network health before swap
+        await this.checkNetworkHealth();
         
         // Execute Jupiter swap
         const swapResult = await this.executeSwapTransaction(options, wallet);
@@ -227,7 +231,7 @@ export class JupiterSwapService {
         quoteResponse: quote,
         userPublicKey: walletPubkey.toBase58(),
         wrapAndUnwrapSol: true,
-        prioritizationFeeLamports: 10000, // Add explicit priority fee for better success rate
+        prioritizationFeeLamports: 50000, // Increase priority fee to 0.00005 SOL for better success rate
       };
 
       console.log(`🔍 Getting swap instructions from: ${swapInstructionsUrl}`);
@@ -273,11 +277,12 @@ export class JupiterSwapService {
       
       console.log('✅ Swap simulation successful, sending transaction...');
       
-      // Send the transaction
+      // Send the transaction with improved retry and priority fee handling
       const signature = await this.connection.sendTransaction(transaction, {
         skipPreflight: false, // Keep preflight to catch errors early
         preflightCommitment: 'confirmed',
-        maxRetries: 3, // Add retry logic
+        maxRetries: 5, // Increase retry attempts
+        minContextSlot: undefined, // Allow any slot
       });
       
       console.log(`📝 Swap transaction sent: ${signature}`);
@@ -291,7 +296,7 @@ export class JupiterSwapService {
       let txStatus;
       
       try {
-        // Try to confirm the transaction
+        // Try to confirm the transaction with a longer timeout
         console.log('   Attempting confirmation...');
         confirmation = await this.connection.confirmTransaction(signature, 'confirmed');
         
@@ -307,47 +312,69 @@ export class JupiterSwapService {
         console.log('❌ Transaction confirmation failed, investigating...');
         console.log('   Error:', confirmError.message);
         
-        // Start detailed transaction monitoring in parallel
-        this.monitorTransaction(signature).catch(() => {
-          // Monitoring failed, but don't let it affect the main flow
-        });
+        // Use a more robust confirmation strategy with longer timeouts
+        console.log('🔄 Attempting extended confirmation strategy...');
         
-        // Check if transaction actually succeeded despite confirmation error
+        // Wait longer and check multiple times
+        for (let attempt = 1; attempt <= 6; attempt++) {
+          console.log(`   Extended confirmation attempt ${attempt}/6...`);
+          
+          try {
+            // Wait progressively longer between attempts
+            const waitTime = attempt * 5000; // 5s, 10s, 15s, 20s, 25s, 30s
+            console.log(`   Waiting ${waitTime/1000} seconds before check ${attempt}...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            
+            // Check transaction status
+            txStatus = await this.connection.getSignatureStatus(signature);
+            console.log(`   Attempt ${attempt}/6 - Status: ${txStatus.value?.confirmationStatus || 'unknown'}`);
+            
+            if (txStatus.value?.confirmationStatus === 'confirmed' || txStatus.value?.confirmationStatus === 'finalized') {
+              console.log(`✅ Transaction confirmed after extended wait (attempt ${attempt})!`);
+              console.log(`   Status: ${txStatus.value.confirmationStatus}`);
+              return signature;
+            }
+            
+            // Check if transaction failed
+            if (txStatus.value?.err) {
+              console.log(`❌ Transaction failed on-chain (attempt ${attempt}):`, txStatus.value.err);
+              throw new Error(`Transaction failed on-chain: ${JSON.stringify(txStatus.value.err)}`);
+            }
+            
+            // If still processing, continue to next attempt
+            if (txStatus.value?.confirmationStatus === 'processed') {
+              console.log(`   Transaction still processing, continuing to next attempt...`);
+              continue;
+            }
+            
+          } catch (attemptError: any) {
+            console.log(`   Attempt ${attempt} failed:`, attemptError.message);
+            if (attempt === 6) {
+              throw attemptError; // Re-throw on final attempt
+            }
+            continue;
+          }
+        }
+        
+        // If we get here, all extended attempts failed
+        console.log('⚠️  All extended confirmation attempts failed, checking final status...');
+        
+        // Final status check
         try {
           txStatus = await this.connection.getSignatureStatus(signature);
-          console.log('   Transaction status:', txStatus.value?.confirmationStatus);
           
           if (txStatus.value?.confirmationStatus === 'confirmed' || txStatus.value?.confirmationStatus === 'finalized') {
-            console.log('✅ Transaction actually succeeded despite confirmation error!');
-            console.log('   Status:', txStatus.value.confirmationStatus);
+            console.log('✅ Final status check shows transaction succeeded!');
             return signature;
           }
           
-          // Check if transaction is still processing
-          if (txStatus.value?.confirmationStatus === 'processed') {
-            console.log('⏳ Transaction still processing, waiting longer...');
-            
-            // Wait a bit more and check again
-            await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 more seconds
-            
-            txStatus = await this.connection.getSignatureStatus(signature);
-            if (txStatus.value?.confirmationStatus === 'confirmed' || txStatus.value?.confirmationStatus === 'finalized') {
-              console.log('✅ Transaction confirmed after extended wait!');
-              return signature;
-            }
-          }
-          
-          // Check if transaction failed
           if (txStatus.value?.err) {
-            console.log('❌ Transaction failed on-chain:', txStatus.value.err);
+            console.log('❌ Final status check shows transaction failed:', txStatus.value.err);
             throw new Error(`Transaction failed on-chain: ${JSON.stringify(txStatus.value.err)}`);
           }
           
-          // If we get here, transaction is in an unknown state
-          console.log('⚠️  Transaction status unknown, investigating further...');
-          
           // Check recent transactions to see if ours went through
-          const recentTxs = await this.connection.getSignaturesForAddress(walletPubkey, { limit: 5 });
+          const recentTxs = await this.connection.getSignaturesForAddress(walletPubkey, { limit: 10 });
           const ourTx = recentTxs.find(tx => tx.signature === signature);
           
           if (ourTx && ourTx.err === null) {
@@ -374,11 +401,12 @@ export class JupiterSwapService {
             console.log('⚠️  Failed to fetch transaction details:', fetchError.message);
           }
           
-          throw new Error(`Transaction confirmation failed and status unclear. Signature: ${signature}`);
+          // If we still can't determine status, throw a more informative error
+          throw new Error(`Transaction status unclear after extended confirmation attempts. Signature: ${signature}. Check Solana Explorer for final status.`);
           
-        } catch (statusError: any) {
-          console.log('❌ Failed to check transaction status:', statusError.message);
-          throw new Error(`Transaction confirmation failed and status check failed. Signature: ${signature}, Error: ${confirmError.message}`);
+        } catch (finalError: any) {
+          console.log('❌ Final status check failed:', finalError.message);
+          throw new Error(`Transaction confirmation failed after extended attempts. Signature: ${signature}. Error: ${finalError.message}`);
         }
       }
       
