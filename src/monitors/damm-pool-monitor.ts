@@ -67,7 +67,7 @@ export class DammPoolMonitor {
     console.log(`   1. Contains WSOL or SOL`);
     console.log(`   2. Contains migrated token`);
     console.log(`   3. Fees paid in quote token (SOL/WSOL)`);
-    console.log(`   4. Linear fee schedule`);
+    console.log(`   4. Quote token only fees (not quote + pool token)`);
     console.log(`📊 Checking every ${this.checkIntervalMs / 1000} seconds...`);
     console.log(`🔑 Connected Wallet: ${this.wallet.getPublicKey().toBase58()}`);
     console.log(`💰 Auto-Purchase Amount: ${this.swapAmountSol} SOL per token`);
