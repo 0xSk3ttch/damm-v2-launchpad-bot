@@ -29,6 +29,6 @@ export function loadConfig(): Config {
         solAmount: parseFloat(process.env.SOL_AMOUNT || '0.002'), // Default to 0.002 SOL per side
         slippageBps: parseInt(process.env.SLIPPAGE_BPS || '2000'), // Default to 20% slippage
         addLiquidity: process.env.ADD_LIQUIDITY === 'true', // Default to false for safety
-        discordWebhook: process.env.DISCORD_WEBHOOK
+        discordWebhook: process.env.DISCORD_WEBHOOK || ''
     };
 }
