@@ -38,6 +38,7 @@ export class DammPoolMonitor {
   private checkInterval: NodeJS.Timeout | null = null;
   private seenPools = new Set<string>();
   private processedTokenPoolPairs = new Set<string>(); // Track token+pool combinations
+  private processedTokens = new Set<string>(); // Track globally processed tokens
 
 
   constructor(options: DammPoolMonitorOptions) {
@@ -81,6 +82,12 @@ export class DammPoolMonitor {
     }
 
     this.migrationTracker.cleanup();
+    
+    // Clear all tracking sets
+    this.seenPools.clear();
+    this.processedTokenPoolPairs.clear();
+    this.processedTokens.clear();
+    
     console.log('DAMM Pool Monitor stopped');
   }
 
@@ -219,6 +226,12 @@ export class DammPoolMonitor {
 
   private async checkTokenForPools(tokenMint: string): Promise<void> {
     try {
+      // Check if token has already been processed globally
+      if (this.processedTokens.has(tokenMint)) {
+        console.log(`   ⏭️  Token ${tokenMint} already processed globally, skipping...`);
+        return;
+      }
+      
       const tokenCA = new PublicKey(tokenMint);
       
       const accounts = await this.connection.getProgramAccounts(this.DAMM_V2_PROGRAM, {
@@ -260,9 +273,12 @@ export class DammPoolMonitor {
             console.log(`Token A: ${pool.tokenAMint.toString()}`);
             console.log(`Token B: ${pool.tokenBMint.toString()}`);
             
-            // IMMEDIATELY mark this token+pool combination as processed to prevent duplicates
-            this.processedTokenPoolPairs.add(tokenPoolKey);
-            this.seenPools.add(poolAddress); // mark pool as seen
+                    // IMMEDIATELY mark this token+pool combination as processed to prevent duplicates
+        this.processedTokenPoolPairs.add(tokenPoolKey);
+        this.seenPools.add(poolAddress); // mark pool as seen
+        
+        // Also mark the token as processed globally to prevent any further processing
+        this.processedTokens.add(tokenMint);
             
             // Send Discord notification for qualifying pool found
             try {
