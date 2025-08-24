@@ -1,4 +1,3 @@
-// src/infra/rpc-provider.ts
 import {
     Connection,
     PublicKey,

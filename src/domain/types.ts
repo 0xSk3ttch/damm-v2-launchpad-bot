@@ -1,4 +1,3 @@
-// src/domain/types.ts
 export interface MigrationEvent {
     mint: string;       // base58 mint that migrated
     ts: number;         // ms since epoch

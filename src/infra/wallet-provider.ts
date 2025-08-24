@@ -23,7 +23,6 @@ export class WalletProvider {
         return new WalletProvider(kp);
     }
 
-    /** Optional: load from a Solana keypair JSON file (array of 64 numbers). */
     static fromKeypairFile(filePath: string): WalletProvider {
         const p = resolve(filePath);
         const raw = readFileSync(p, 'utf8');
@@ -59,8 +58,6 @@ export class WalletProvider {
         tx.sign([this.kp]);
     }
 }
-
-/* ----------------------- helpers ----------------------- */
 
 /** Accepts JSON array, base58 secret, hex secret, or 32-byte seed (hex/base58) */
 function parseSecretToBuffer(input: string): Buffer {

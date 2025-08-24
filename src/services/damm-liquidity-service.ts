@@ -34,10 +34,8 @@ export class DammLiquidityService {
    */
   async addLiquidity(options: LiquidityOptions): Promise<LiquidityResult> {
     try {
-      console.log(`🏊 Adding liquidity to DAMM pool: ${options.poolAddress}`);
-      console.log(`   Token: ${options.tokenMint}`);
-      console.log(`   SOL Amount: ${options.solAmount} SOL per side`);
-      console.log(`   Total Position: ${options.solAmount * 2} SOL equivalent`);
+      console.log(`Adding liquidity to DAMM pool: ${options.poolAddress}`);
+      console.log(`Token: ${options.tokenMint}`);
 
       const walletPubkey = options.wallet.getPublicKey ? options.wallet.getPublicKey() : options.wallet.publicKey;
       
@@ -47,51 +45,50 @@ export class DammLiquidityService {
       
       if (solBalance < requiredSol) {
         const error = `Insufficient SOL balance. Required: ${(requiredSol / 1e9).toFixed(3)} SOL, Available: ${(solBalance / 1e9).toFixed(3)} SOL`;
-        console.error(`❌ ${error}`);
+        console.error(`${error}`);
         return { success: false, error };
       }
 
-      console.log(`💰 Wallet balance: ${(solBalance / 1e9).toFixed(3)} SOL, Required: ${(requiredSol / 1e9).toFixed(3)} SOL`);
+      console.log(`Wallet balance: ${(solBalance / 1e9).toFixed(3)} SOL, Required: ${(requiredSol / 1e9).toFixed(3)} SOL`);
 
       // Check if we have the token with retry mechanism
       let tokenBalance = await this.checkTokenBalance(options.tokenMint, walletPubkey);
       if (!tokenBalance) {
-        console.log(`⏳ Token not found immediately, waiting for settlement...`);
+        console.log(`Token not found immediately, waiting for settlement...`);
         
         // Wait up to 30 seconds for the token to appear (Jupiter swaps can take time)
         for (let attempt = 1; attempt <= 6; attempt++) {
           const waitTime = attempt * 5000; // 5s, 10s, 15s, 20s, 25s, 30s
-          console.log(`   Attempt ${attempt}/6: Waiting ${waitTime/1000} seconds...`);
+          console.log(`Attempt ${attempt}/6: Waiting ${waitTime/1000} seconds...`);
           await new Promise(resolve => setTimeout(resolve, waitTime));
           
           tokenBalance = await this.checkTokenBalance(options.tokenMint, walletPubkey);
           if (tokenBalance) {
-            console.log(`✅ Token found after ${waitTime/1000} seconds!`);
+            console.log(`Token found after ${waitTime/1000} seconds!`);
             break;
           }
           
           if (attempt === 6) {
             const error = `Token ${options.tokenMint} not found in wallet after 30 seconds`;
-            console.error(`❌ ${error}`);
+            console.error(`${error}`);
             return { success: false, error };
           }
         }
       }
 
-      console.log(`🪙 Token balance: ${tokenBalance} tokens`);
+      console.log(`Token balance: ${tokenBalance} tokens`);
 
       // Ensure we have token accounts for both tokens
       await this.ensureTokenAccounts(options.tokenMint, walletPubkey);
 
       // Fetch pool state to understand the pool structure
-      console.log(`🔍 Fetching pool state for ${options.poolAddress}...`);
+      console.log(`Fetching pool state for ${options.poolAddress}...`);
       const poolPubkey = new PublicKey(options.poolAddress);
       const poolState = await this.cpAmm.fetchPoolState(poolPubkey);
       
-      console.log(`📊 Pool Information:`);
-      console.log(`   Token A: ${poolState.tokenAMint.toString()}`);
-      console.log(`   Token B: ${poolState.tokenBMint.toString()}`);
-      console.log(`   Pool Type: CP-AMM`);
+      console.log(`Pool Information:`);
+      console.log(`Token A: ${poolState.tokenAMint.toString()}`);
+      console.log(`Token B: ${poolState.tokenBMint.toString()}`);
 
       // Determine which token is which (A or B) and calculate amounts
       const isTokenA = poolState.tokenAMint.toString() === options.tokenMint;
@@ -101,13 +98,13 @@ export class DammLiquidityService {
 
       if (!isTokenA && !isTokenB) {
         const error = `Token ${options.tokenMint} not found in pool ${options.poolAddress}`;
-        console.error(`❌ ${error}`);
+        console.error(`${error}`);
         return { success: false, error };
       }
 
       if (!isSOLTokenA && !isSOLTokenB) {
         const error = `SOL/WSOL not found in pool ${options.poolAddress}`;
-        console.error(`❌ ${error}`);
+        console.error(`${error}`);
         return { success: false, error };
       }
 
@@ -121,9 +118,6 @@ export class DammLiquidityService {
       
       // Round down to nearest whole token to avoid precision issues
       const roundedTokenAmount = Math.floor(targetTokenAmount / 1000) * 1000; // Round down to nearest 1000 tokens
-      if (roundedTokenAmount < targetTokenAmount) {
-        console.log(`   ⚠️  Rounded token amount from ${targetTokenAmount} to ${roundedTokenAmount} to avoid precision issues`);
-      }
       
       if (isTokenA) {
         // Token A is our token, Token B is SOL
@@ -132,28 +126,27 @@ export class DammLiquidityService {
         const denominator = new BN(2).pow(new BN(64)).mul(new BN(2).pow(new BN(64)));
         const priceRatio = priceSquared.mul(new BN(roundedTokenAmount)).div(denominator);
         requiredSolAmount = priceRatio;
-        console.log(`   📊 Pool price: ${priceRatio.toNumber() / roundedTokenAmount} SOL per token (using BN)`);
+        console.log(`Pool price: ${priceRatio.toNumber() / roundedTokenAmount} SOL per token (using BN)`);
       } else {
         // Token B is our token, Token A is SOL
         // Calculate SOL needed using BN operations
         const denominator = poolState.sqrtPrice.mul(poolState.sqrtPrice);
         const priceRatio = new BN(2).pow(new BN(128)).mul(new BN(roundedTokenAmount)).div(denominator);
         requiredSolAmount = priceRatio;
-        console.log(`   📊 Pool price: ${priceRatio.toNumber() / roundedTokenAmount} SOL per token (using BN)`);
+        console.log(`Pool price: ${priceRatio.toNumber() / roundedTokenAmount} SOL per token (using BN)`);
       }
       
       // Ensure we have enough SOL
       if (requiredSolAmount.gt(new BN(solBalance))) {
         const error = `Insufficient SOL balance. Need ${(requiredSolAmount.toNumber() / 1e9).toFixed(6)} SOL, have ${(solBalance / 1e9).toFixed(6)} SOL`;
-        console.error(`❌ ${error}`);
+        console.error(`${error}`);
         return { success: false, error };
       }
 
-      console.log(`📊 Liquidity amounts calculated:`);
-      console.log(`   Target token amount: ${targetTokenAmount}`);
-      console.log(`   Rounded token amount: ${roundedTokenAmount}`);
-      console.log(`   Required SOL amount: ${requiredSolAmount.toString()} lamports (${(requiredSolAmount.toNumber() / 1e9).toFixed(6)} SOL)`);
-      console.log(`   Using ALL available tokens for maximum position size!`);
+      console.log(`Liquidity amounts calculated:`);
+      console.log(`Token amount: ${roundedTokenAmount}`);
+      console.log(`Required SOL amount: ${requiredSolAmount.toString()} lamports (${(requiredSolAmount.toNumber() / 1e9).toFixed(6)} SOL)`);
+      console.log(`Using ALL available tokens for maximum position size!`);
       
       // The issue: Meteora SDK calculates its own amounts, we need to let it do that
       // Instead of forcing our amounts, we should use the SDK's calculation methods
@@ -161,21 +154,13 @@ export class DammLiquidityService {
       // Get wallet keypair for signing transactions
       const keypair = options.wallet.getKeypair ? options.wallet.getKeypair() : options.wallet;
       
-      // 🎯 BREAKTHROUGH: Now using the REAL DAMM v2 SDK with proper methods!
-      // Based on the official documentation: https://github.com/MeteoraAg/damm-v2-sdk/blob/main/docs.md#createPosition
-      console.log(`🏊 Using REAL DAMM v2 SDK: createPosition + addLiquidity approach!`);
-      
-      // Use the working approach: createPositionAndAddLiquidity in a single transaction
-      console.log(`🏗️  Using single transaction approach: createPositionAndAddLiquidity...`);
-      
-      // IMPROVED: Detect token program (Token-2022 vs regular) like the SDK example
       const tokenAAccountInfo = await this.connection.getAccountInfo(poolState.tokenAMint);
       let tokenAProgram = TOKEN_PROGRAM_ID;
       let tokenAInfo: any = undefined;
       
       if (tokenAAccountInfo && tokenAAccountInfo.owner.equals(TOKEN_2022_PROGRAM_ID)) {
         tokenAProgram = tokenAAccountInfo.owner;
-        console.log(`   🔍 Token A uses Token-2022 program`);
+        console.log(`Token A uses Token-2022 program`);
         
         try {
           const baseMint = await getMint(
@@ -189,20 +174,20 @@ export class DammLiquidityService {
             mint: baseMint,
             currentEpoch: epochInfo.epoch,
           };
-          console.log(`   ✅ Token A info retrieved for Token-2022`);
+          console.log(`Token A info retrieved for Token-2022`);
         } catch (error) {
-          console.log(`   ⚠️  Could not get Token-2022 info: ${error}`);
+          console.log(`Could not get Token-2022 info: ${error}`);
         }
       } else {
-        console.log(`   🔍 Token A uses regular Token program`);
+        console.log(`Token A uses regular Token program`);
       }
       
       // Generate new position NFT keypair
       const positionNft = Keypair.generate();
-      console.log(`   Position NFT: ${positionNft.publicKey.toString()}`);
+      console.log(`Position NFT: ${positionNft.publicKey.toString()}`);
       
       // Calculate liquidity delta using the working method
-      console.log(`📊 Calculating liquidity delta using getLiquidityDelta...`);
+      console.log(`Calculating liquidity delta using getLiquidityDelta...`);
       const liquidityDelta = this.cpAmm.getLiquidityDelta({
         maxAmountTokenA: new BN(roundedTokenAmount),
         maxAmountTokenB: requiredSolAmount,
@@ -212,7 +197,7 @@ export class DammLiquidityService {
         tokenAInfo, // Use Token-2022 info if available
       });
       
-      console.log(`📊 Liquidity delta calculated: ${liquidityDelta.toString()}`);
+      console.log(`Liquidity delta calculated: ${liquidityDelta.toString()}`);
       
       // Create position and add liquidity in a single transaction
       const createPositionAndAddLiquidityTx = await this.cpAmm.createPositionAndAddLiquidity({
@@ -230,7 +215,7 @@ export class DammLiquidityService {
         tokenBProgram: TOKEN_PROGRAM_ID,
       });
       
-      console.log(`📝 Signing and sending createPositionAndAddLiquidity transaction...`);
+      console.log(`Signing and sending createPositionAndAddLiquidity transaction...`);
       
       // Sign and send the transaction
       const { blockhash } = await this.connection.getLatestBlockhash();
@@ -245,12 +230,11 @@ export class DammLiquidityService {
         { commitment: 'confirmed' }
       );
       
-      console.log(`🎉 SUCCESS! Position created and liquidity added to DAMM pool!`);
-      console.log(`   Position NFT: ${positionNft.publicKey.toString()}`);
-      console.log(`   Liquidity Added: ${roundedTokenAmount} tokens + ${requiredSolAmount.toNumber()} lamports (${(requiredSolAmount.toNumber() / 1e9).toFixed(6)} SOL)`);
-      console.log(`   Transaction: ${signature}`);
-      console.log(`   🔗 View position: https://explorer.solana.com/address/${positionNft.publicKey.toString()}`);
-      console.log(`   🔗 View transaction: https://explorer.solana.com/tx/${signature}`);
+      console.log(`SUCCESS! Position created and liquidity added to DAMM pool!`);
+      console.log(`Liquidity Added: ${roundedTokenAmount} tokens + ${requiredSolAmount.toNumber()} lamports (${(requiredSolAmount.toNumber() / 1e9).toFixed(6)} SOL)`);
+      console.log(`Transaction: ${signature}`);
+      console.log(`View position: https://explorer.solana.com/address/${positionNft.publicKey.toString()}`);
+      console.log(`View transaction: https://explorer.solana.com/tx/${signature}`);
 
       return {
         success: true,
@@ -259,7 +243,7 @@ export class DammLiquidityService {
       };
 
     } catch (error: any) {
-      console.error(`❌ Error adding liquidity to DAMM pool:`, error);
+      console.error(`Error adding liquidity to DAMM pool:`, error);
       
       // Enhanced error parsing for DAMM program errors
       let errorMessage = error.message;
@@ -267,20 +251,20 @@ export class DammLiquidityService {
       
       // Check if this is a SendTransactionError with custom program error
       if (error.transactionMessage && error.transactionMessage.includes('Custom:')) {
-        console.log(`🔍 Analyzing transaction error details...`);
+        console.log(`Analyzing transaction error details...`);
         
         // Parse the custom error and instruction number
         const customMatch = error.transactionMessage.match(/InstructionError.*\[(\d+),.*Custom:(\d+)\]/);
         if (customMatch) {
           const instructionNumber = parseInt(customMatch[1]);
           const errorCode = parseInt(customMatch[2]);
-          console.log(`   📊 Error in Instruction ${instructionNumber}: Custom:${errorCode}`);
+          console.log(`Error in Instruction ${instructionNumber}: Custom:${errorCode}`);
           
           // Analyze based on instruction number and error code
           if (instructionNumber >= 4) {
-            console.log(`   ✅ This is likely a SUCCESSFUL transaction!`);
-            console.log(`   📊 Instruction ${instructionNumber} failed, but core DAMM operations (1-3) succeeded`);
-            console.log(`   🔍 Custom:${errorCode} typically means:`);
+            console.log(`This is likely a SUCCESSFUL transaction!`);
+            console.log(`Instruction ${instructionNumber} failed, but core DAMM operations (1-3) succeeded`);
+            console.log(`Custom:${errorCode} typically means:`);
             
             switch (errorCode) {
               case 1:
@@ -299,25 +283,25 @@ export class DammLiquidityService {
                 break;
             }
             
-            console.log(`   🎯 This error is NON-CRITICAL and the position was likely created successfully`);
+            console.log(`his error is NON-CRITICAL and the position was likely created successfully`);
             isActuallySuccess = true;
           } else {
-            console.log(`   ❌ This is a CRITICAL error in core DAMM operations`);
-            console.log(`   📊 Instruction ${instructionNumber} handles core functionality`);
+            console.log(`This is a CRITICAL error in core DAMM operations`);
+            console.log(`Instruction ${instructionNumber} handles core functionality`);
           }
         }
         
         // Check transaction logs for more details
         if (error.transactionLogs) {
-          console.log(`   📋 Transaction logs:`, error.transactionLogs);
+          console.log(`Transaction logs:`, error.transactionLogs);
         }
       }
       
       // If we think it's actually a success, return success
       if (isActuallySuccess) {
-        console.log(`🎉 Transaction appears to have succeeded despite error message!`);
-        console.log(`   This is common with DAMM v2 - error codes can indicate success with warnings`);
-        console.log(`   The position was likely created successfully despite the error`);
+        console.log(`Transaction appears to have succeeded despite error message!`);
+        console.log(`This is common with DAMM v2 - error codes can indicate success with warnings`);
+        console.log(`The position was likely created successfully despite the error`);
         
         return {
           success: true,
@@ -370,15 +354,15 @@ export class DammLiquidityService {
         // Check if account exists
         try {
           await getAccount(this.connection, tokenAccount);
-          console.log(`✅ Token account exists for ${mint === this.WSOL_MINT ? 'WSOL' : 'token'}`);
+          console.log(`Token account exists for ${mint === this.WSOL_MINT ? 'WSOL' : 'token'}`);
         } catch {
           // Account doesn't exist - this is okay, the SDK will handle creation
-          console.log(`📝 Token account will be created by SDK for ${mint === this.WSOL_MINT ? 'WSOL' : 'token'}`);
-          console.log(`   Account: ${tokenAccount.toBase58()}`);
+          console.log(`Token account will be created by SDK for ${mint === this.WSOL_MINT ? 'WSOL' : 'token'}`);
+          console.log(`Account: ${tokenAccount.toBase58()}`);
         }
       }
     } catch (error: any) {
-      console.error(`❌ Error checking token accounts:`, error);
+      console.error(`Error checking token accounts:`, error);
       throw error;
     }
   }
@@ -390,7 +374,7 @@ export class DammLiquidityService {
     try {
       // TODO: Implement pool info retrieval using Meteora SDK
       // This would give us details about the pool structure, fees, etc.
-      console.log(`🔍 Getting pool info for: ${poolAddress}`);
+      console.log(`Getting pool info for: ${poolAddress}`);
       
       // Placeholder - implement with actual SDK calls
       return {
@@ -400,7 +384,7 @@ export class DammLiquidityService {
         fee: 'UNKNOWN'
       };
     } catch (error: any) {
-      console.error(`❌ Error getting pool info:`, error);
+      console.error(`Error getting pool info:`, error);
       return null;
     }
   }

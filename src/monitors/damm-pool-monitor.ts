@@ -12,7 +12,7 @@ export interface DammPoolMonitorOptions {
   checkIntervalMs?: number;
   discordWebhookUrl: string;
   wallet: any; // Wallet for executing swaps
-  swapAmountSol?: number; // Amount of SOL to swap (default 0.02)
+  swapAmountSol?: number;
   addLiquidity?: boolean; // Whether to automatically add liquidity to matching pools
 }
 
@@ -52,27 +52,16 @@ export class DammPoolMonitor {
     this.wallet = options.wallet;
     this.swapAmountSol = options.swapAmountSol || 0.01; // 0.01 SOL per token (reduced to ensure sufficient balance for fees
     this.addLiquidity = options.addLiquidity || false; // Default to false for safety
-    
-    // System is now production-ready - only responds to real Pump.fun migrations
-    console.log('🚀 Production mode: Only real migrations will trigger pool monitoring');
   }
 
   async start(): Promise<void> {
     if (this.isRunning) {
-      console.log('⚠️ DAMM Pool Monitor is already running');
+      console.log('DAMM Pool Monitor is already running');
       return;
     }
 
     this.isRunning = true;
-    console.log('🚀 Starting DAMM Pool Monitor...');
-    console.log(`🎯 Monitoring for DAMM v2 pools with our criteria:`);
-    console.log(`   1. Contains WSOL or SOL`);
-    console.log(`   2. Contains migrated token`);
-    console.log(`   3. Fees paid in quote token (SOL/WSOL)`);
-    console.log(`   4. Quote token only fees (not quote + pool token)`);
-    console.log(`📊 Checking every ${this.checkIntervalMs / 1000} seconds...`);
-    console.log(`🔑 Connected Wallet: ${this.wallet.getPublicKey().toBase58()}`);
-    console.log(`💰 Auto-Purchase Amount: ${this.swapAmountSol} SOL per token`);
+    console.log('Starting DAMM Pool Monitor...');
     console.log('');
 
     // Start the monitoring loop
@@ -92,7 +81,7 @@ export class DammPoolMonitor {
     }
 
     this.migrationTracker.cleanup();
-    console.log('🛑 DAMM Pool Monitor stopped');
+    console.log('DAMM Pool Monitor stopped');
   }
 
   // Public method to add migrated tokens (called from migration monitor)
@@ -118,7 +107,7 @@ export class DammPoolMonitor {
       // Check if we already have the token in our wallet
       const walletHasToken = await this.jupiterService.checkWalletTokenBalance(tokenMint, this.wallet);
       if (walletHasToken) {
-        console.log(`✅ Wallet already contains ${tokenMint}, skipping purchase`);
+        console.log(`Wallet already contains ${tokenMint}, skipping purchase`);
         return;
       }
 
@@ -131,17 +120,17 @@ export class DammPoolMonitor {
       };
 
       const signature = await this.jupiterService.executeSwap(swapOptions, this.wallet);
-      console.log(`✅ Token purchase completed! Transaction: ${signature}`);
+      console.log(`Token purchase completed! Transaction: ${signature}`);
       
     } catch (error) {
-      console.error(`❌ Error executing token purchase:`, error);
+      console.error(`Error executing token purchase:`, error);
     }
   }
 
   // Execute liquidity addition to DAMM pool
   private async executeLiquidityAddition(poolAddress: string, tokenMint: string, _pool: any): Promise<void> {
     try {
-      console.log(`🏊 Executing liquidity addition to DAMM pool: ${poolAddress}`);
+      console.log(`Executing liquidity addition to DAMM pool: ${poolAddress}`);
       
       // Wait a bit for the token purchase to settle
       console.log(`⏳ Waiting 5 seconds for token purchase to settle...`);
@@ -158,41 +147,41 @@ export class DammPoolMonitor {
       const result = await this.liquidityService.addLiquidity(liquidityOptions);
       
       if (result.success) {
-        console.log(`✅ Liquidity added successfully to pool ${poolAddress}`);
+        console.log(`Liquidity added successfully to pool ${poolAddress}`);
         if (result.transactionSignature) {
-          console.log(`   Transaction: ${result.transactionSignature}`);
+          console.log(`Transaction: ${result.transactionSignature}`);
         }
         if (result.positionAddress) {
-          console.log(`   Position: ${result.positionAddress}`);
+          console.log(`Position: ${result.positionAddress}`);
         }
         
         // Send Discord notification for successful position creation
         try {
           await this.discord.sendPositionCreatedAlert(tokenMint, poolAddress, this.connection);
-          console.log('📢 Position created Discord notification sent successfully');
+          console.log('Position created Discord notification sent successfully');
         } catch (error) {
-          console.error('❌ Discord notification failed:', error);
+          console.error('Discord notification failed:', error);
         }
         
         // Remove token from pending list after successful liquidity addition
         this.migrationTracker.removeToken(tokenMint);
-        console.log(`✅ Removed token ${tokenMint} from pending list`);
+        console.log(`Removed token ${tokenMint} from pending list`);
       } else {
-        console.error(`❌ Failed to add liquidity: ${result.error}`);
+        console.error(`Failed to add liquidity: ${result.error}`);
         
         // Even if liquidity fails, the position might have been created
         // Send Discord notification anyway since we see position NFTs in logs
-        console.log('⚠️  Liquidity failed but position may have been created - sending notification anyway');
-        try {
-          await this.discord.sendPositionCreatedAlert(tokenMint, poolAddress, this.connection);
-          console.log('📢 Position created Discord notification sent (despite liquidity failure)');
-        } catch (error) {
-          console.error('❌ Discord notification failed:', error);
-        }
+        // console.log('Liquidity failed but position may have been created - sending notification anyway');
+        // try {
+        //   await this.discord.sendPositionCreatedAlert(tokenMint, poolAddress, this.connection);
+        //   console.log('Position created Discord notification sent (despite liquidity failure)');
+        // } catch (error) {
+        //   console.error('Discord notification failed:', error);
+        // }
       }
       
     } catch (error: any) {
-      console.error(`❌ Error executing liquidity addition:`, error);
+      console.error(`Error executing liquidity addition:`, error);
     }
   }
 
@@ -209,12 +198,12 @@ export class DammPoolMonitor {
       const tokenCount = this.migrationTracker.getTokenCount();
       
       if (tokenCount === 0) {
-        console.log(`🔍 No migrated tokens to check for pools`);
+        console.log(`No migrated tokens to check for pools`);
         return;
       }
 
-      console.log(`🕐 Checking pools at ${new Date().toLocaleTimeString()}`);
-      console.log(`🔍 Checking for pools containing ${tokenCount} migrated tokens...`);
+      console.log(`Checking pools at ${new Date().toLocaleTimeString()}`);
+      console.log(`Checking for pools containing ${tokenCount} migrated tokens...`);
       
       const tokens = this.migrationTracker.getTokens();
       
@@ -222,9 +211,9 @@ export class DammPoolMonitor {
         await this.checkTokenForPools(tokenMint);
       }
       
-      console.log(`⏳ Waiting ${this.checkIntervalMs / 1000} seconds before next check...\n`);
+      console.log(`Waiting ${this.checkIntervalMs / 1000} seconds before next check...\n`);
     } catch (err) {
-      console.error('❌ Error in pool checking loop:', err);
+      console.error('Error in pool checking loop:', err);
     }
   }
 
@@ -243,14 +232,14 @@ export class DammPoolMonitor {
         return;
       }
 
-      console.log(`🎯 Found ${accounts.length} candidate pool(s) containing token ${tokenMint}`);
+      console.log(`Found ${accounts.length} candidate pool(s) containing token ${tokenMint}`);
       
       for (const { pubkey } of accounts) {
         const poolAddress = pubkey.toBase58();
         const tokenPoolKey = `${tokenMint}-${poolAddress}`;
         
         if (this.processedTokenPoolPairs.has(tokenPoolKey)) {
-          console.log(`   ⏭️  Already processed token ${tokenMint} for pool ${poolAddress}, skipping...`);
+          console.log(`Already processed token ${tokenMint} for pool ${poolAddress}, skipping...`);
           continue; // skip already processed token+pool combinations
         }
         
@@ -259,17 +248,17 @@ export class DammPoolMonitor {
           continue; // skip already seen pools
         }
         
-        console.log(`   🔍 Checking pool ${poolAddress} for token ${tokenMint}...`);
+        console.log(`Checking pool ${poolAddress} for token ${tokenMint}...`);
 
         try {
           const pool = await this.cpAmm.fetchPoolState(pubkey);
           
           // Apply our filtering criteria
           if (await this.criteriaChecker.meetsAllCriteria(pool, tokenCA)) {
-            console.log(`🚨 MATCHING POOL FOUND! 🎉`);
-            console.log(`   Pool: ${pubkey.toBase58()}`);
-            console.log(`   Token A: ${pool.tokenAMint.toString()}`);
-            console.log(`   Token B: ${pool.tokenBMint.toString()}`);
+            console.log(`MATCHING POOL FOUND! 🎉`);
+            console.log(`Pool: ${pubkey.toBase58()}`);
+            console.log(`Token A: ${pool.tokenAMint.toString()}`);
+            console.log(`Token B: ${pool.tokenBMint.toString()}`);
             
             // IMMEDIATELY mark this token+pool combination as processed to prevent duplicates
             this.processedTokenPoolPairs.add(tokenPoolKey);
@@ -278,41 +267,41 @@ export class DammPoolMonitor {
             // Send Discord notification for qualifying pool found
             try {
               await this.discord.sendPoolFoundAlert(tokenMint, pubkey.toBase58(), this.connection);
-              console.log('📢 Pool found Discord notification sent successfully');
+              console.log('Pool found Discord notification sent successfully');
             } catch (error) {
-              console.error('❌ Discord pool found notification failed:', error);
+              console.error('Discord pool found notification failed:', error);
             }
             
             try {
               // Execute automatic token purchase
-              console.log(`💰 Executing automatic token purchase for ${tokenMint}`);
+              console.log(`Executing automatic token purchase for ${tokenMint}`);
               await this.executeTokenPurchase(tokenMint, pool);
               
               // Add liquidity to the pool if enabled
               if (this.addLiquidity) {
-                console.log(`🏊 Executing liquidity addition to DAMM pool: ${pubkey.toBase58()}`);
-                console.log(`   💰 Will use ALL available tokens and calculate required SOL amount`);
+                console.log(`Executing liquidity addition to DAMM pool: ${pubkey.toBase58()}`);
+                console.log(`Will use ALL available tokens and calculate required SOL amount`);
                 await this.executeLiquidityAddition(pubkey.toBase58(), tokenMint, pool);
               }
               
             } catch (error: any) {
-              console.error(`❌ Error processing token ${tokenMint}:`, error.message);
+              console.error(`Error processing token ${tokenMint}:`, error.message);
             }
             
             // Remove token from pending list since we found a pool
             this.migrationTracker.removeToken(tokenMint);
-            console.log(`✅ Removed token ${tokenMint} from pending list - pool found!`);
+            console.log(`Removed token ${tokenMint} from pending list - pool found!`);
             
             // Break out of the pool loop since we found a qualifying pool for this token
             break;
           }
 
         } catch (err) {
-          console.error(`❌ Error fetching pool ${pubkey.toBase58()}:`, err);
+          console.error(`Error fetching pool ${pubkey.toBase58()}:`, err);
         }
       }
     } catch (err) {
-      console.error(`❌ Error checking pools for token ${tokenMint}:`, err);
+      console.error(`Error checking pools for token ${tokenMint}:`, err);
     }
   }
 }
