@@ -2,7 +2,8 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import { CpAmm } from '@meteora-ag/cp-amm-sdk';
 import { MigrationTracker } from '../services/migration-tracker';
 import { PoolCriteriaChecker } from '../services/pool-criteria-checker';
-import { DiscordPoolNotifier } from '../services/discord-pool-notifier';
+
+import { DiscordNotifier } from '../services/discord-notifier';
 import { JupiterSwapService } from '../services/jupiter-swap-service';
 import { DammLiquidityService } from '../services/damm-liquidity-service';
 
@@ -20,7 +21,7 @@ export class DammPoolMonitor {
   private readonly cpAmm: CpAmm;
   private readonly migrationTracker: MigrationTracker;
   private readonly criteriaChecker: PoolCriteriaChecker;
-  private readonly discordNotifier: DiscordPoolNotifier;
+  private readonly discord: DiscordNotifier;
   private readonly jupiterService: JupiterSwapService;
   private readonly liquidityService: DammLiquidityService;
   private readonly checkIntervalMs: number;
@@ -36,6 +37,7 @@ export class DammPoolMonitor {
   private isRunning = false;
   private checkInterval: NodeJS.Timeout | null = null;
   private seenPools = new Set<string>();
+  private processedTokenPoolPairs = new Set<string>(); // Track token+pool combinations
 
 
   constructor(options: DammPoolMonitorOptions) {
@@ -43,7 +45,7 @@ export class DammPoolMonitor {
     this.cpAmm = new CpAmm(options.connection);
     this.migrationTracker = new MigrationTracker();
     this.criteriaChecker = new PoolCriteriaChecker();
-    this.discordNotifier = new DiscordPoolNotifier(options.discordWebhookUrl);
+    this.discord = new DiscordNotifier(options.discordWebhookUrl);
     this.jupiterService = new JupiterSwapService(options.connection);
     this.liquidityService = new DammLiquidityService(options.connection);
     this.checkIntervalMs = options.checkIntervalMs || 20000; // Default 20 seconds
@@ -163,8 +165,30 @@ export class DammPoolMonitor {
         if (result.positionAddress) {
           console.log(`   Position: ${result.positionAddress}`);
         }
+        
+        // Send Discord notification for successful position creation
+        try {
+          await this.discord.sendPositionCreatedAlert(tokenMint, poolAddress, this.connection);
+          console.log('📢 Position created Discord notification sent successfully');
+        } catch (error) {
+          console.error('❌ Discord notification failed:', error);
+        }
+        
+        // Remove token from pending list after successful liquidity addition
+        this.migrationTracker.removeToken(tokenMint);
+        console.log(`✅ Removed token ${tokenMint} from pending list`);
       } else {
         console.error(`❌ Failed to add liquidity: ${result.error}`);
+        
+        // Even if liquidity fails, the position might have been created
+        // Send Discord notification anyway since we see position NFTs in logs
+        console.log('⚠️  Liquidity failed but position may have been created - sending notification anyway');
+        try {
+          await this.discord.sendPositionCreatedAlert(tokenMint, poolAddress, this.connection);
+          console.log('📢 Position created Discord notification sent (despite liquidity failure)');
+        } catch (error) {
+          console.error('❌ Discord notification failed:', error);
+        }
       }
       
     } catch (error: any) {
@@ -222,9 +246,20 @@ export class DammPoolMonitor {
       console.log(`🎯 Found ${accounts.length} candidate pool(s) containing token ${tokenMint}`);
       
       for (const { pubkey } of accounts) {
-        if (this.seenPools.has(pubkey.toBase58())) {
+        const poolAddress = pubkey.toBase58();
+        const tokenPoolKey = `${tokenMint}-${poolAddress}`;
+        
+        if (this.processedTokenPoolPairs.has(tokenPoolKey)) {
+          console.log(`   ⏭️  Already processed token ${tokenMint} for pool ${poolAddress}, skipping...`);
+          continue; // skip already processed token+pool combinations
+        }
+        
+        if (this.seenPools.has(poolAddress)) {
+          console.log(`   ⏭️  Pool ${poolAddress} already seen, skipping...`);
           continue; // skip already seen pools
         }
+        
+        console.log(`   🔍 Checking pool ${poolAddress} for token ${tokenMint}...`);
 
         try {
           const pool = await this.cpAmm.fetchPoolState(pubkey);
@@ -236,15 +271,27 @@ export class DammPoolMonitor {
             console.log(`   Token A: ${pool.tokenAMint.toString()}`);
             console.log(`   Token B: ${pool.tokenBMint.toString()}`);
             
-            // Send Discord notification
-            await this.discordNotifier.sendPoolFoundAlert(pubkey.toBase58(), tokenMint, pool);
+            // IMMEDIATELY mark this token+pool combination as processed to prevent duplicates
+            this.processedTokenPoolPairs.add(tokenPoolKey);
+            this.seenPools.add(poolAddress); // mark pool as seen
+            
+            // Send Discord notification for qualifying pool found
+            try {
+              await this.discord.sendPoolFoundAlert(tokenMint, pubkey.toBase58(), this.connection);
+              console.log('📢 Pool found Discord notification sent successfully');
+            } catch (error) {
+              console.error('❌ Discord pool found notification failed:', error);
+            }
             
             try {
               // Execute automatic token purchase
+              console.log(`💰 Executing automatic token purchase for ${tokenMint}`);
               await this.executeTokenPurchase(tokenMint, pool);
               
               // Add liquidity to the pool if enabled
               if (this.addLiquidity) {
+                console.log(`🏊 Executing liquidity addition to DAMM pool: ${pubkey.toBase58()}`);
+                console.log(`   💰 Will use ALL available tokens and calculate required SOL amount`);
                 await this.executeLiquidityAddition(pubkey.toBase58(), tokenMint, pool);
               }
               
@@ -255,9 +302,10 @@ export class DammPoolMonitor {
             // Remove token from pending list since we found a pool
             this.migrationTracker.removeToken(tokenMint);
             console.log(`✅ Removed token ${tokenMint} from pending list - pool found!`);
+            
+            // Break out of the pool loop since we found a qualifying pool for this token
+            break;
           }
-
-          this.seenPools.add(pubkey.toBase58()); // mark as seen
 
         } catch (err) {
           console.error(`❌ Error fetching pool ${pubkey.toBase58()}:`, err);

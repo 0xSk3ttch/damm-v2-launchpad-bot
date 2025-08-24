@@ -135,19 +135,34 @@ export class PoolCriteriaChecker {
       // We need to examine the pool structure to find the actual fee collection mode
       console.log(`      🔍 Full pool fees structure:`, JSON.stringify(pool.poolFees, null, 2));
       
-      // The feeSchedulerMode field in baseFee might actually be the collect fee mode
-      const feeCollectionMode = pool.poolFees.baseFee.feeSchedulerMode;
+      // Check the collectFeeMode field directly from the pool
       let hasQuoteTokenOnlyFees = false;
       
-      if (feeCollectionMode === 0) {
-        console.log(`      ❌ Fee Collection: Base + Quote (not what we want)`);
-        hasQuoteTokenOnlyFees = false;
-      } else if (feeCollectionMode === 1) {
-        console.log(`      ✅ Fee Collection: Quote only (exactly what we want!)`);
-        hasQuoteTokenOnlyFees = true;
+      if (pool.collectFeeMode !== undefined) {
+        // collectFeeMode: 1 = Quote token only, 0 = Base + Quote
+        if (pool.collectFeeMode === 1) {
+          console.log(`      ✅ Fee Collection: Quote only (exactly what we want!)`);
+          hasQuoteTokenOnlyFees = true;
+        } else if (pool.collectFeeMode === 0) {
+          console.log(`      ❌ Fee Collection: Base + Quote (not what we want)`);
+          hasQuoteTokenOnlyFees = false;
+        } else {
+          console.log(`      ❓ Unknown collect fee mode: ${pool.collectFeeMode}`);
+          hasQuoteTokenOnlyFees = false;
+        }
       } else {
-        console.log(`      ❓ Unknown fee collection mode: ${feeCollectionMode}`);
-        hasQuoteTokenOnlyFees = false; // Be strict with unknown modes
+        // Fallback: try to check poolFees.baseFee.feeSchedulerMode if collectFeeMode not available
+        const feeCollectionMode = pool.poolFees?.baseFee?.feeSchedulerMode;
+        if (feeCollectionMode === 1) {
+          console.log(`      ✅ Fee Collection: Quote only (fallback check)`);
+          hasQuoteTokenOnlyFees = true;
+        } else if (feeCollectionMode === 0) {
+          console.log(`      ❌ Fee Collection: Base + Quote (fallback check)`);
+          hasQuoteTokenOnlyFees = false;
+        } else {
+          console.log(`      ❓ Unknown fee collection mode: ${feeCollectionMode}`);
+          hasQuoteTokenOnlyFees = false;
+        }
       }
       
       // Second check: Fee Scheduler Mode (Linear vs Exponential)
@@ -174,20 +189,40 @@ export class PoolCriteriaChecker {
         // Linear schedulers should use simple arithmetic reduction
         // Exponential schedulers use exponential decay
         
-        // Heuristic: If the reduction factor is small relative to cliff fee, it's likely linear
-        // If it's a percentage (like 5000-9000 for 50%-90%), it might be exponential
-        const reductionFactorNum = Number(reductionFactor.toString());
-        const cliffFeeNum = Number(cliffFeeNumerator.toString());
+        // Check if there are other fields in the pool that might indicate Linear vs Exponential
+        if (pool.collectFeeMode !== undefined) {
+          console.log(`         Pool collectFeeMode: ${pool.collectFeeMode}`);
+        }
         
-        if (reductionFactorNum < cliffFeeNum / 10) {
-          console.log(`      ✅ Appears to be Linear scheduler (small reduction factor)`);
-          isLinearScheduler = true;
-        } else if (reductionFactorNum > 1000) {
-          console.log(`      ⚠️  Might be Exponential scheduler (large reduction factor)`);
-          isLinearScheduler = false;
+        // NEW: Check the base_fee field directly from the pool JSON
+        // High base fees (like 30%+) typically indicate exponential schedules
+        // Lower base fees (like 5-10%) typically indicate linear schedules
+        if (pool.base_fee !== undefined) {
+          const baseFeePercent = Number(pool.base_fee);
+          console.log(`         Pool base_fee: ${baseFeePercent}%`);
+          
+          if (baseFeePercent > 20) {
+            console.log(`      ❌ High base fee (${baseFeePercent}%) suggests Exponential scheduler`);
+            isLinearScheduler = false;
+          } else if (baseFeePercent <= 20) {
+            console.log(`      ✅ Low base fee (${baseFeePercent}%) suggests Linear scheduler`);
+            isLinearScheduler = true;
+          }
         } else {
-          console.log(`      ❓ Unclear scheduler type - being conservative`);
-          isLinearScheduler = false;
+          // Fallback: use the old heuristic based on reduction factor
+          const reductionFactorNum = Number(reductionFactor.toString());
+          const cliffFeeNum = Number(cliffFeeNumerator.toString());
+          
+          if (reductionFactorNum < cliffFeeNum / 10) {
+            console.log(`      ✅ Appears to be Linear scheduler (fallback: small reduction factor)`);
+            isLinearScheduler = true;
+          } else if (reductionFactorNum > 1000) {
+            console.log(`      ⚠️  Might be Exponential scheduler (fallback: large reduction factor)`);
+            isLinearScheduler = false;
+          } else {
+            console.log(`      ❓ Unclear scheduler type - being conservative`);
+            isLinearScheduler = false;
+          }
         }
       } else {
         console.log(`      ❌ No fee scheduler present`);

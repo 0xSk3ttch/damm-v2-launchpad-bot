@@ -8,6 +8,7 @@ import { MigrationMonitor } from '../monitors/migration-monitor';
 import { DammPoolMonitor } from '../monitors/damm-pool-monitor';
 import { DiscordNotifier } from '../services/discord-notifier';
 
+
 async function main(): Promise<void> {
     const cfg = loadConfig();
 
@@ -58,15 +59,11 @@ async function main(): Promise<void> {
             // Add token to DAMM monitor's pending list
             dammMonitor.addMigratedToken(evt.mint);
             
-            // Send Discord notification with proper metadata
+            // Send Discord notification for migration detected
             try {
-                await discord.sendMigrationAlert(
-                    evt.mint,
-                    evt.sig || 'Unknown',
-                    connection
-                );
+                await discord.sendMigrationAlert(evt.mint, evt.sig || 'Unknown', connection);
             } catch (error) {
-                console.error('❌ Discord notification failed:', error);
+                console.error('❌ Discord migration notification failed:', error);
             }
         },
         ttlMs: 5 * 60 * 1000, // 5 min de-dupe window

@@ -112,13 +112,48 @@ export class DammLiquidityService {
       }
 
       // Calculate amounts based on the token we want to use
-      // Use 100% of the tokens we bought for the SOL amount we spent
-      const targetTokenAmount = tokenBalance!; // Use 100% of our token balance (we know it's not null here)
-      const solAmount = Math.floor(options.solAmount * 1e9); // Convert to lamports
+      // Use 100% of the tokens we bought and calculate required SOL amount
+      const targetTokenAmount = tokenBalance!; // Use 100% of our token balance
+      
+      // Calculate required SOL amount based on current pool price and token amount
+      // Use BN operations to avoid precision issues with large numbers
+      let requiredSolAmount: BN;
+      
+      // Round down to nearest whole token to avoid precision issues
+      const roundedTokenAmount = Math.floor(targetTokenAmount / 1000) * 1000; // Round down to nearest 1000 tokens
+      if (roundedTokenAmount < targetTokenAmount) {
+        console.log(`   ⚠️  Rounded token amount from ${targetTokenAmount} to ${roundedTokenAmount} to avoid precision issues`);
+      }
+      
+      if (isTokenA) {
+        // Token A is our token, Token B is SOL
+        // Calculate SOL needed using BN operations
+        const priceSquared = poolState.sqrtPrice.mul(poolState.sqrtPrice);
+        const denominator = new BN(2).pow(new BN(64)).mul(new BN(2).pow(new BN(64)));
+        const priceRatio = priceSquared.mul(new BN(roundedTokenAmount)).div(denominator);
+        requiredSolAmount = priceRatio;
+        console.log(`   📊 Pool price: ${priceRatio.toNumber() / roundedTokenAmount} SOL per token (using BN)`);
+      } else {
+        // Token B is our token, Token A is SOL
+        // Calculate SOL needed using BN operations
+        const denominator = poolState.sqrtPrice.mul(poolState.sqrtPrice);
+        const priceRatio = new BN(2).pow(new BN(128)).mul(new BN(roundedTokenAmount)).div(denominator);
+        requiredSolAmount = priceRatio;
+        console.log(`   📊 Pool price: ${priceRatio.toNumber() / roundedTokenAmount} SOL per token (using BN)`);
+      }
+      
+      // Ensure we have enough SOL
+      if (requiredSolAmount.gt(new BN(solBalance))) {
+        const error = `Insufficient SOL balance. Need ${(requiredSolAmount.toNumber() / 1e9).toFixed(6)} SOL, have ${(solBalance / 1e9).toFixed(6)} SOL`;
+        console.error(`❌ ${error}`);
+        return { success: false, error };
+      }
 
       console.log(`📊 Liquidity amounts calculated:`);
       console.log(`   Target token amount: ${targetTokenAmount}`);
-      console.log(`   SOL amount: ${solAmount} lamports (${options.solAmount} SOL)`);
+      console.log(`   Rounded token amount: ${roundedTokenAmount}`);
+      console.log(`   Required SOL amount: ${requiredSolAmount.toString()} lamports (${(requiredSolAmount.toNumber() / 1e9).toFixed(6)} SOL)`);
+      console.log(`   Using ALL available tokens for maximum position size!`);
       
       // The issue: Meteora SDK calculates its own amounts, we need to let it do that
       // Instead of forcing our amounts, we should use the SDK's calculation methods
@@ -169,8 +204,8 @@ export class DammLiquidityService {
       // Calculate liquidity delta using the working method
       console.log(`📊 Calculating liquidity delta using getLiquidityDelta...`);
       const liquidityDelta = this.cpAmm.getLiquidityDelta({
-        maxAmountTokenA: new BN(targetTokenAmount),
-        maxAmountTokenB: new BN(solAmount),
+        maxAmountTokenA: new BN(roundedTokenAmount),
+        maxAmountTokenB: requiredSolAmount,
         sqrtPrice: poolState.sqrtPrice,
         sqrtMinPrice: poolState.sqrtMinPrice,
         sqrtMaxPrice: poolState.sqrtMaxPrice,
@@ -185,10 +220,10 @@ export class DammLiquidityService {
         pool: poolPubkey,
         positionNft: positionNft.publicKey,
         liquidityDelta,
-        maxAmountTokenA: new BN(targetTokenAmount),
-        maxAmountTokenB: new BN(solAmount),
-        tokenAAmountThreshold: new BN(targetTokenAmount), // Accept the full amount
-        tokenBAmountThreshold: new BN(solAmount), // Accept the full amount
+        maxAmountTokenA: new BN(roundedTokenAmount),
+        maxAmountTokenB: requiredSolAmount,
+        tokenAAmountThreshold: new BN(roundedTokenAmount), // Accept the rounded amount
+        tokenBAmountThreshold: requiredSolAmount, // Accept the calculated SOL amount
         tokenAMint: poolState.tokenAMint,
         tokenBMint: poolState.tokenBMint,
         tokenAProgram,
@@ -212,7 +247,7 @@ export class DammLiquidityService {
       
       console.log(`🎉 SUCCESS! Position created and liquidity added to DAMM pool!`);
       console.log(`   Position NFT: ${positionNft.publicKey.toString()}`);
-      console.log(`   Liquidity Added: ${targetTokenAmount} tokens + ${solAmount} lamports`);
+      console.log(`   Liquidity Added: ${roundedTokenAmount} tokens + ${requiredSolAmount.toNumber()} lamports (${(requiredSolAmount.toNumber() / 1e9).toFixed(6)} SOL)`);
       console.log(`   Transaction: ${signature}`);
       console.log(`   🔗 View position: https://explorer.solana.com/address/${positionNft.publicKey.toString()}`);
       console.log(`   🔗 View transaction: https://explorer.solana.com/tx/${signature}`);
