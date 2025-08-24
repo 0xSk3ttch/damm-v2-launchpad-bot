@@ -1,84 +1,86 @@
-// src/app/index.ts
 import 'dotenv/config';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { loadConfig } from '../config/config';
 import { RpcProvider } from '../infra/rpc-provider';
 import { WalletProvider } from '../infra/wallet-provider';
 import { MigrationMonitor } from '../monitors/migration-monitor';
+import { DammPoolMonitor } from '../monitors/damm-pool-monitor';
 import { DiscordNotifier } from '../services/discord-notifier';
-
 
 
 async function main(): Promise<void> {
     const cfg = loadConfig();
 
-    // --- RPC / Wallet ---
+    // Connect to RPC and instantiate wallet
     const connection = new Connection(cfg.rpcEndpoint, {
         commitment: 'finalized',
         wsEndpoint: cfg.wsEndpoint,
     });
     const rpc = new RpcProvider(connection);
     const wallet = WalletProvider.fromPrivateKey(cfg.privateKey);
-    console.log('🔑 Wallet:', wallet.getPublicKey().toBase58());
-
-    // No pool monitoring for now - starting fresh
-
-    // --- Services ---
-
-    // Discord notification service
-    const discord = new DiscordNotifier('https://discord.com/api/webhooks/1408201047725576212/RInFt1ytBIkaMQibeACRdjqPDIMW0JBHDztxoYE6_u4pdHPOWlDgQ2SiVZ1SL4aABgfD');
+    const walletAddress = wallet.getPublicKey().toBase58();
     
-    // Simple migration tracking (no pool matching for now)
-    const migrations = new Set<string>();
-    const migrationTimestamps = new Map<string, number>();
+    // Display wallet info prominently
+    console.log('========================================');
+    console.log('BOT WALLET CONFIGURATION');
+    console.log('========================================');
+    console.log(`Wallet Address: ${walletAddress}`);
+    console.log(`Swap Amount: ${cfg.solAmount * 2} SOL per token (${cfg.solAmount} per side)`);
+    console.log('========================================');
+    console.log('');
 
-    // Pump.fun migration monitor - simple tracking only
+    // --- Instantiate Services ---
+    const discord = new DiscordNotifier(cfg.discordWebhook);
+    
+    // --- DAMM Pool Monitor ---
+    const dammMonitor = new DammPoolMonitor({
+        connection,
+        checkIntervalMs: 20000, // 20 seconds
+        discordWebhookUrl: cfg.discordWebhook,
+        wallet,
+        swapAmountSol: cfg.solAmount, // Use configured SOL amount per token
+        addLiquidity: cfg.addLiquidity // Use configured value for liquidity addition
+    });
+
+    // --- Migration Monitor ---
     const migration = new MigrationMonitor(rpc, {
         pumpFunProgramId: new PublicKey(cfg.pumpFunProgramId),
         onMigration: async (evt): Promise<void> => {
             const now = Date.now();
-            const expiry = now + (5 * 60 * 1000); // 5 minutes
             
-            migrations.add(evt.mint);
-            migrationTimestamps.set(evt.mint, expiry);
-            
-            console.log('🎓 Migration detected! Adding to 5-minute watchlist...');
-            console.log(`   Token: ${evt.mint}`);
-            console.log(`   Timestamp: ${new Date(now).toISOString()}`);
-            console.log(`   ⏰ Will watch until ${new Date(expiry).toISOString()}`);
-            console.log(`   📊 Total migrations watching: ${migrations.size}`);
+            console.log('Migration detected! Adding to DAMM bot pending list...');
+            console.log(`Token: ${evt.mint}`);
+            console.log(`Timestamp: ${new Date(now).toISOString()}`);
+            console.log(` Will watch for DAMM pools for 7 minutes`);
             console.log('---');
             
-            // Send Discord notification with proper metadata
+            // Add token to DAMM monitor's pending list
+            dammMonitor.addMigratedToken(evt.mint);
+            
+            // Send Discord notification for migration detected
             try {
-                await discord.sendMigrationAlert(
-                    evt.mint,
-                    evt.sig || 'Unknown',
-                    connection
-                );
+                await discord.sendMigrationAlert(evt.mint, evt.sig || 'Unknown', connection);
             } catch (error) {
-                console.error('❌ Discord notification failed:', error);
+                console.error('Discord migration notification failed:', error);
             }
         },
-        ttlMs: 5 * 60 * 1000, // 5 min de-dupe window
+        ttlMs: 5 * 60 * 1000, // 5 min de-dupe window to avoid same token if occurs
         commitment: 'finalized',
     });
 
-    // No DAMM pool monitoring for now - starting fresh
-
     // --- Start up ---
     await migration.start();
+    await dammMonitor.start();
 
-    console.log('✅ Migration monitor running.');
-    console.log('📢 Discord notifications enabled (with proper token names)');
-    console.log('🎯 Workflow: Migration Detection → Discord Alert → 5-minute Watchlist');
-    console.log('⏰ Migration tokens are watched for 5 minutes');
-    console.log('🔥 this is a firehose');
+    console.log('Migration monitor running.');
+    console.log('DAMM pool monitor running.');
+    console.log(`🔑 Bot Wallet: ${walletAddress.slice(0, 8)}...${walletAddress.slice(-8)}`);
 
     // --- Graceful shutdown ---
     const shutdown = async (): Promise<void> => {
-        console.log('🛑 Shutting down…');
+        console.log('Shutting down…');
         await migration.stop();
+        await dammMonitor.stop();
         process.exit(0);
     };
     process.on('SIGINT', shutdown);

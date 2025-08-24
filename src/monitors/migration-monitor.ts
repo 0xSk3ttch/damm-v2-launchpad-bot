@@ -1,4 +1,3 @@
-// src/monitors/migration-monitor.ts
 // WebSocket monitor for Pump.fun migrations (graduations).
 // Emits a MigrationEvent with a mint when log hints match.
 // This is WebSocket-only: extracts mint addresses directly from logs.
@@ -72,12 +71,10 @@ export class MigrationMonitor {
                     return;
                 }
                 
-                console.log('🔍 Real migration detected! Getting transaction details to extract token mint...');
-                
                 // Extract the actual migrated token mint from transaction data
                 const mint = await this.extractMintFromTransaction(sig);
                 if (!mint) {
-                    console.log('❌ Could not extract token mint from migration transaction');
+                    console.log('Could not extract token mint from migration transaction');
                     this.markSig(sig, ts);
                     return;
                 }
@@ -91,7 +88,7 @@ export class MigrationMonitor {
                 this.markMint(mint, ts);
 
                 this.onMigration({ mint, ts, sig, slot });
-                console.log('🎓 Migration detected (WS only):', { mint, sig });
+                console.log('Migration detected (WS only):', { mint, sig });
             } catch (e) {
                 // Keep firehose running
                 console.error('Pump.fun WS log handler error:', e);
@@ -99,7 +96,6 @@ export class MigrationMonitor {
         };
 
         this.logsSubId = conn.onLogs(this.programId, cb, this.commitment);
-        console.log(`🚰 Firehose: Pump.fun migrations on ${this.programId.toBase58()} (${this.commitment}) - WebSocket only`);
     }
 
     async stop(): Promise<void> {
@@ -108,12 +104,10 @@ export class MigrationMonitor {
                 await this.rpc.getConnection().removeOnLogsListener(this.logsSubId);
             } catch {}
             this.logsSubId = null;
-            console.log('🛑 Unsubscribed from Pump.fun logs');
+            console.log('Unsubscribed from Pump.fun logs');
         }
         clearInterval(this.sweeper);
     }
-
-    // ---------- internals ----------
 
     private async extractMintFromTransaction(signature: string): Promise<string | undefined> {
         try {
@@ -124,15 +118,13 @@ export class MigrationMonitor {
             });
             
             if (!tx || !tx.meta || !tx.meta.postTokenBalances) {
-                console.log('   ❌ No transaction data or postTokenBalances found');
+                console.log('No transaction data or postTokenBalances found');
                 return undefined;
             }
             
             const WSOL = 'So11111111111111111111111111111111111111112';
             const postBalances = tx.meta.postTokenBalances;
-            
-            console.log('   📊 Post token balances found:', postBalances.length);
-            
+
             // Look for non-WSOL tokens that have non-zero balances
             // These are likely the migrated tokens
             const migratedTokens = postBalances.filter(balance => 
@@ -142,19 +134,19 @@ export class MigrationMonitor {
             );
             
             if (migratedTokens.length === 0) {
-                console.log('   ❌ No migrated tokens found in postTokenBalances');
+                console.log('No migrated tokens found in postTokenBalances');
                 return undefined;
             }
             
             // Take the first migrated token (usually there's only one)
             const migratedToken = migratedTokens[0];
-            console.log(`   ✅ Found migrated token: ${migratedToken.mint}`);
-            console.log(`      Amount: ${migratedToken.uiTokenAmount.uiAmountString} ${migratedToken.uiTokenAmount.decimals} decimals`);
+            console.log(`Found migrated token: ${migratedToken.mint}`);
+            console.log(`Amount: ${migratedToken.uiTokenAmount.uiAmountString} ${migratedToken.uiTokenAmount.decimals} decimals`);
             
             return migratedToken.mint;
             
         } catch (error) {
-            console.error('   ❌ Error extracting token mint from transaction:', error);
+            console.error('Error extracting token mint from transaction:', error);
             return undefined;
         }
     }

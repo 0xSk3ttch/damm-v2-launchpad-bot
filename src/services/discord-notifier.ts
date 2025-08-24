@@ -97,6 +97,134 @@ export class DiscordNotifier {
         }
     }
 
+
+
+    async sendPoolFoundAlert(tokenMint: string, poolAddress: string, connection: any): Promise<void> {
+        try {
+            // Fetch token metadata to get name
+            let tokenName = 'Unknown';
+            
+            try {
+                // Get metadata account address (Metaplex format)
+                const metadataAddress = await this.getMetadataAddress(tokenMint);
+                const metadataAccount = await connection.getAccountInfo(metadataAddress);
+                
+                if (metadataAccount && metadataAccount.data) {
+                    // Parse Metaplex token metadata
+                    const metadata = this.parseMetaplexMetadata(metadataAccount.data);
+                    tokenName = metadata.name || 'Unknown';
+                }
+            } catch (error) {
+                console.log('Could not fetch token metadata, using defaults');
+            }
+
+            const payload: DiscordWebhookPayload = {
+                embeds: [{
+                    title: '🎯 Matching DAMM Pool Found!',
+                    description: 'A pool matching our criteria has been discovered!',
+                    color: 0xffaa00, // Orange color
+                    fields: [
+                        {
+                            name: '🪙 Token Name',
+                            value: tokenName,
+                            inline: false
+                        },
+                        {
+                            name: '📋 Token Address',
+                            value: `\`${tokenMint}\``,
+                            inline: false
+                        },
+                        {
+                            name: '🏊 Pool Address',
+                            value: `\`${poolAddress}\``,
+                            inline: false
+                        }
+                    ],
+                    timestamp: new Date().toISOString()
+                }]
+            };
+
+            const response = await fetch(this.webhookUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Discord webhook failed: ${response.status} ${response.statusText}`);
+            }
+
+            console.log('📢 Pool found Discord notification sent successfully');
+        } catch (error) {
+            console.error('❌ Failed to send pool found Discord notification:', error);
+        }
+    }
+
+    async sendPositionCreatedAlert(tokenMint: string, poolAddress: string, connection: any): Promise<void> {
+        try {
+            // Fetch token metadata to get name
+            let tokenName = 'Unknown';
+            
+            try {
+                // Get metadata account address (Metaplex format)
+                const metadataAddress = await this.getMetadataAddress(tokenMint);
+                const metadataAccount = await connection.getAccountInfo(metadataAddress);
+                
+                if (metadataAccount && metadataAccount.data) {
+                    // Parse Metaplex token metadata
+                    const metadata = this.parseMetaplexMetadata(metadataAccount.data);
+                    tokenName = metadata.name || 'Unknown';
+                }
+            } catch (error) {
+                console.log('Could not fetch token metadata, using defaults');
+            }
+
+            const payload: DiscordWebhookPayload = {
+                embeds: [{
+                    title: '🏊 DAMM Position Created!',
+                    description: 'Successfully entered a DAMM pool position!',
+                    color: 0x0099ff, // Blue color
+                    fields: [
+                        {
+                            name: '🪙 Token Name',
+                            value: tokenName,
+                            inline: false
+                        },
+                        {
+                            name: '📋 Token Address',
+                            value: `\`${tokenMint}\``,
+                            inline: false
+                        },
+                        {
+                            name: '🏊 Pool Address',
+                            value: `\`${poolAddress}\``,
+                            inline: false
+                        }
+                    ],
+                    timestamp: new Date().toISOString()
+                }]
+            };
+
+            const response = await fetch(this.webhookUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Discord webhook failed: ${response.status} ${response.statusText}`);
+            }
+
+            console.log('📢 Position created Discord notification sent successfully');
+        } catch (error) {
+            console.error('❌ Failed to send position created Discord notification:', error);
+        }
+    }
+
     private async getMetadataAddress(mintAddress: string): Promise<PublicKey> {
         // Metaplex metadata program ID
         const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
