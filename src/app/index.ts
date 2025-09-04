@@ -74,17 +74,52 @@ async function main(): Promise<void> {
 
     console.log('Migration monitor running.');
     console.log('DAMM pool monitor running.');
-    console.log(`🔑 Bot Wallet: ${walletAddress.slice(0, 8)}...${walletAddress.slice(-8)}`);
+    console.log(`Bot Wallet: ${walletAddress.slice(0, 8)}...${walletAddress.slice(-8)}`);
 
     // --- Graceful shutdown ---
-    const shutdown = async (): Promise<void> => {
-        console.log('Shutting down…');
-        await migration.stop();
-        await dammMonitor.stop();
-        process.exit(0);
+    const shutdown = async (signal: string): Promise<void> => {
+        console.log(`Received ${signal}, shutting down gracefully...`);
+        
+        try {
+            // Stop all monitors
+            console.log('Stopping migration monitor...');
+            await migration.stop();
+            
+            console.log('Stopping DAMM pool monitor...');
+            await dammMonitor.stop();
+            
+            console.log('All processes stopped successfully');
+            console.log('Shutdown complete');
+            
+        } catch (error) {
+            console.error('Error during shutdown:', error);
+        } finally {
+            // Force exit after 5 seconds if graceful shutdown fails
+            setTimeout(() => {
+                console.log('Force exit after timeout');
+                process.exit(1);
+            }, 5000);
+            
+            process.exit(0);
+        }
     };
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
+    
+    // Handle different shutdown signals
+    process.on('SIGINT', () => shutdown('SIGINT'));   // Ctrl+C
+    process.on('SIGTERM', () => shutdown('SIGTERM')); // Kill command
+    process.on('SIGQUIT', () => shutdown('SIGQUIT')); // Quit signal
+    
+    // Handle uncaught exceptions
+    process.on('uncaughtException', (error) => {
+        console.error('Uncaught Exception:', error);
+        shutdown('uncaughtException');
+    });
+    
+    // Handle unhandled promise rejections
+    process.on('unhandledRejection', (reason, promise) => {
+        console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+        shutdown('unhandledRejection');
+    });
 }
 
 main().catch((e) => {

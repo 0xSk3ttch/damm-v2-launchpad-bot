@@ -40,7 +40,7 @@ export class PoolCriteriaChecker {
         hasLinearSchedule: hasQuoteTokenOnlyFees
       };
     } catch (err) {
-      console.error('❌ Error checking pool criteria:', err);
+      console.error('Error checking pool criteria:', err);
       return {
         hasWSOL: false,
         hasSOL: false,
@@ -58,40 +58,40 @@ export class PoolCriteriaChecker {
     console.log(`   🔍 Pool Analysis for ${pool.tokenAMint.toString()}/${pool.tokenBMint.toString()}:`);
     
     if (!criteria.hasWSOL && !criteria.hasSOL) {
-      console.log(`   ❌ Pool doesn't contain WSOL or SOL`);
+      console.log(`Pool doesn't contain WSOL or SOL`);
     } else {
-      console.log(`   ✅ Contains SOL/WSOL`);
+      console.log(`Contains SOL/WSOL`);
     }
     
     if (!criteria.hasMigratedToken) {
-      console.log(`   ❌ Pool doesn't contain migrated token`);
+      console.log(`Pool doesn't contain migrated token`);
     } else {
-      console.log(`   ✅ Contains migrated token`);
+      console.log(`Contains migrated token`);
     }
     
     if (!criteria.feesInQuoteToken) {
-      console.log(`   ❌ Fees not paid in quote token (SOL/WSOL)`);
+      console.log(`Fees not paid in quote token (SOL/WSOL)`);
     } else {
-      console.log(`   ✅ Fees in quote token`);
+      console.log(`Fees in quote token`);
     }
     
     if (!criteria.hasLinearSchedule) {
-      console.log(`   ❌ Not quote token only fees`);
+      console.log(`Not quote token only fees`);
       // Log more details about the fee structure
       if (pool.poolFees) {
-        console.log(`   📊 Pool fees found:`, JSON.stringify(pool.poolFees, null, 2));
+        console.log(`Pool fees found:`, JSON.stringify(pool.poolFees, null, 2));
       } else {
-        console.log(`   📊 No pool fees data found`);
+        console.log(`No pool fees data found`);
       }
     } else {
-      console.log(`   ✅ Quote token only fees (exactly what we want!)`);
+      console.log(`Quote token only fees`);
     }
     
     const allMet = criteria.hasWSOL || criteria.hasSOL;
     const allMet2 = criteria.hasMigratedToken && criteria.feesInQuoteToken && criteria.hasLinearSchedule;
     
     if (allMet && allMet2) {
-      console.log(`   ✅ ALL CRITERIA MET! This is a party pool! 🎉`);
+      console.log(`ALL CRITERIA MET!`);
     }
     
     return allMet && allMet2;
@@ -99,12 +99,12 @@ export class PoolCriteriaChecker {
 
   private async checkFeesInQuoteToken(_pool: any, _quoteTokenMint: string): Promise<boolean> {
     try {
-      // This is a simplified check - in practice we'd need to analyze the fee structure
-      // For now, we'll assume pools with our criteria have fees in quote token
+      // This is a simplified check - need to analyze the fee structure
+      // For now, assume pools with criteria have fees in quote token
       // TODO: Implement proper fee analysis using pool.poolFees data
       return true;
     } catch (err) {
-      console.error(`   ❌ Error checking fee structure:`, err);
+      console.error(`Error checking fee structure:`, err);
       return false;
     }
   }
@@ -112,16 +112,16 @@ export class PoolCriteriaChecker {
   private async checkQuoteTokenOnlyFees(pool: any): Promise<boolean> {
     try {
       if (!pool.poolFees || !pool.poolFees.baseFee) {
-        console.log(`   📊 No pool fees data found - assuming acceptable fee structure`);
+        console.log(`No pool fees data found - assuming acceptable fee structure`);
         return true; // Assume acceptable if no fee data
       }
       
       // Log detailed fee information for debugging
-      console.log(`   📊 Fee structure analysis:`);
-      console.log(`      feeSchedulerMode: ${pool.poolFees.baseFee.feeSchedulerMode}`);
-      console.log(`      numberOfPeriod: ${pool.poolFees.baseFee.numberOfPeriod}`);
-      console.log(`      periodFrequency: ${pool.poolFees.baseFee.periodFrequency}`);
-      console.log(`      reductionFactor: ${pool.poolFees.baseFee.reductionFactor}`);
+      console.log(`Fee structure analysis:`);
+      console.log(`feeSchedulerMode: ${pool.poolFees.baseFee.feeSchedulerMode}`);
+      console.log(`numberOfPeriod: ${pool.poolFees.baseFee.numberOfPeriod}`);
+      console.log(`periodFrequency: ${pool.poolFees.baseFee.periodFrequency}`);
+      console.log(`reductionFactor: ${pool.poolFees.baseFee.reductionFactor}`);
       
       // Check if it has a fee scheduler
       // numberOfPeriod > 0 indicates a scheduler is present
@@ -133,34 +133,34 @@ export class PoolCriteriaChecker {
       
       // First check: Fee Collection Token (this is controlled by collectFeeMode in the pool)
       // We need to examine the pool structure to find the actual fee collection mode
-      console.log(`      🔍 Full pool fees structure:`, JSON.stringify(pool.poolFees, null, 2));
+      console.log(`Full pool fees structure:`, JSON.stringify(pool.poolFees, null, 2));
       
       // Check the collectFeeMode field directly from the pool
       let hasQuoteTokenOnlyFees = false;
-      
+      // TODO: This is a little fucked up
       if (pool.collectFeeMode !== undefined) {
         // collectFeeMode: 1 = Quote token only, 0 = Base + Quote
         if (pool.collectFeeMode === 1) {
-          console.log(`      ✅ Fee Collection: Quote only (exactly what we want!)`);
+          console.log(` Fee Collection: Quote only (exactly what we want!)`);
           hasQuoteTokenOnlyFees = true;
         } else if (pool.collectFeeMode === 0) {
-          console.log(`      ❌ Fee Collection: Base + Quote (not what we want)`);
+          console.log(`Fee Collection: Base + Quote (not what we want)`);
           hasQuoteTokenOnlyFees = false;
         } else {
-          console.log(`      ❓ Unknown collect fee mode: ${pool.collectFeeMode}`);
+          console.log(`Unknown collect fee mode: ${pool.collectFeeMode}`);
           hasQuoteTokenOnlyFees = false;
         }
       } else {
         // Fallback: try to check poolFees.baseFee.feeSchedulerMode if collectFeeMode not available
         const feeCollectionMode = pool.poolFees?.baseFee?.feeSchedulerMode;
         if (feeCollectionMode === 1) {
-          console.log(`      ✅ Fee Collection: Quote only (fallback check)`);
+          console.log(`Fee Collection: Quote only (fallback check)`);
           hasQuoteTokenOnlyFees = true;
         } else if (feeCollectionMode === 0) {
-          console.log(`      ❌ Fee Collection: Base + Quote (fallback check)`);
+          console.log(`Fee Collection: Base + Quote (fallback check)`);
           hasQuoteTokenOnlyFees = false;
         } else {
-          console.log(`      ❓ Unknown fee collection mode: ${feeCollectionMode}`);
+          console.log(`Unknown fee collection mode: ${feeCollectionMode}`);
           hasQuoteTokenOnlyFees = false;
         }
       }
@@ -174,24 +174,19 @@ export class PoolCriteriaChecker {
         const reductionFactor = pool.poolFees.baseFee.reductionFactor;
         const cliffFeeNumerator = pool.poolFees.baseFee.cliffFeeNumerator;
         
-        console.log(`      🔍 Scheduler type analysis:`);
-        console.log(`         Reduction factor: ${reductionFactor}`);
-        console.log(`         Cliff fee numerator: ${cliffFeeNumerator}`);
-        console.log(`         Period frequency: ${pool.poolFees.baseFee.periodFrequency}`);
-        console.log(`         Number of periods: ${pool.poolFees.baseFee.numberOfPeriod}`);
+        console.log(`Scheduler type analysis:`);
+        console.log(`Reduction factor: ${reductionFactor}`);
+        console.log(`Cliff fee numerator: ${cliffFeeNumerator}`);
+        console.log(`Period frequency: ${pool.poolFees.baseFee.periodFrequency}`);
+        console.log(`Number of periods: ${pool.poolFees.baseFee.numberOfPeriod}`);
         
         // Check if there are other fields in the pool that might indicate Linear vs Exponential
         if (pool.collectFeeMode !== undefined) {
-          console.log(`         Pool collectFeeMode: ${pool.collectFeeMode}`);
+          console.log(`Pool collectFeeMode: ${pool.collectFeeMode}`);
         }
-        
-        // For now, we need to log everything and figure out the pattern
-        // Linear schedulers should use simple arithmetic reduction
-        // Exponential schedulers use exponential decay
-        
         // Check if there are other fields in the pool that might indicate Linear vs Exponential
         if (pool.collectFeeMode !== undefined) {
-          console.log(`         Pool collectFeeMode: ${pool.collectFeeMode}`);
+          console.log(`Pool collectFeeMode: ${pool.collectFeeMode}`);
         }
         
         // NEW: Check the base_fee field directly from the pool JSON
@@ -199,42 +194,42 @@ export class PoolCriteriaChecker {
         // Lower base fees (like 5-10%) typically indicate linear schedules
         if (pool.base_fee !== undefined) {
           const baseFeePercent = Number(pool.base_fee);
-          console.log(`         Pool base_fee: ${baseFeePercent}%`);
+          console.log(`Pool base_fee: ${baseFeePercent}%`);
           
           if (baseFeePercent > 20) {
-            console.log(`      ❌ High base fee (${baseFeePercent}%) suggests Exponential scheduler`);
+            console.log(`High base fee (${baseFeePercent}%) suggests Exponential scheduler`);
             isLinearScheduler = false;
           } else if (baseFeePercent <= 20) {
-            console.log(`      ✅ Low base fee (${baseFeePercent}%) suggests Linear scheduler`);
+            console.log(`Low base fee (${baseFeePercent}%) suggests Linear scheduler`);
             isLinearScheduler = true;
           }
         } else {
-          // Fallback: use the old heuristic based on reduction factor
+          //use the old heuristic based on reduction factor
           const reductionFactorNum = Number(reductionFactor.toString());
           const cliffFeeNum = Number(cliffFeeNumerator.toString());
           
           if (reductionFactorNum < cliffFeeNum / 10) {
-            console.log(`      ✅ Appears to be Linear scheduler (fallback: small reduction factor)`);
+            console.log(`Appears to be Linear scheduler (fallback: small reduction factor)`);
             isLinearScheduler = true;
           } else if (reductionFactorNum > 1000) {
-            console.log(`      ⚠️  Might be Exponential scheduler (fallback: large reduction factor)`);
+            console.log(`Might be Exponential scheduler (fallback: large reduction factor)`);
             isLinearScheduler = false;
           } else {
-            console.log(`      ❓ Unclear scheduler type - being conservative`);
+            console.log(`Unclear scheduler type - being conservative`);
             isLinearScheduler = false;
           }
         }
       } else {
-        console.log(`      ❌ No fee scheduler present`);
+        console.log(`No fee scheduler present`);
       }
       
       const result = hasScheduler && hasQuoteTokenOnlyFees && isLinearScheduler;
-      console.log(`      📊 Final result: hasScheduler=${hasScheduler}, quoteTokenOnly=${hasQuoteTokenOnlyFees}, linearScheduler=${isLinearScheduler}, result=${result}`);
+      console.log(`Final result: hasScheduler=${hasScheduler}, quoteTokenOnly=${hasQuoteTokenOnlyFees}, linearScheduler=${isLinearScheduler}, result=${result}`);
       
       return result;
     } catch (err) {
-      console.error(`   ❌ Error checking fee schedule:`, err);
-      console.log(`   📊 Error analyzing fees - assuming acceptable structure`);
+      console.error(`Error checking fee schedule:`, err);
+      console.log(`Error analyzing fees - assuming acceptable structure`);
       return true; // Assume acceptable on error
     }
   }

@@ -29,7 +29,6 @@ export class RpcProvider {
                 try {
                     await cb({ signature: entry.signature, logs: entry.logs ?? [] });
                 } catch (e) {
-                    // Do not throw inside WS callback; just log.
                     console.error('onProgramLogs callback error:', e);
                 }
             },
@@ -41,7 +40,6 @@ export class RpcProvider {
         try {
             await this.connection.removeOnLogsListener(subId);
         } catch {
-            /* ignore */
         }
     }
 

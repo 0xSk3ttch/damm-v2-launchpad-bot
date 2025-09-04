@@ -12,7 +12,7 @@ export class MigrationTracker {
     // Set expiration timeout
     const timeout = setTimeout(() => {
       if (this.migratedTokens.has(tokenMint)) {
-        console.log(`⏰ Token ${tokenMint} expired after ${expirationMs / 1000 / 60} minutes - removing from pending list`);
+        console.log(`Token ${tokenMint} expired after ${expirationMs / 1000 / 60} minutes - removing from pending list`);
         this.removeToken(tokenMint);
       }
     }, expirationMs);
@@ -23,7 +23,7 @@ export class MigrationTracker {
   removeToken(tokenMint: string): void {
     this.migratedTokens.delete(tokenMint);
     this.clearExpirationTimeout(tokenMint);
-    console.log(`✅ Removed token ${tokenMint} from pending list`);
+    console.log(`Removed token ${tokenMint} from pending list`);
   }
 
   hasToken(tokenMint: string): boolean {
@@ -43,7 +43,7 @@ export class MigrationTracker {
       this.clearExpirationTimeout(token);
     }
     this.migratedTokens.clear();
-    console.log('🧹 Cleared all migrated tokens');
+    console.log('Cleared all migrated tokens');
   }
 
   private clearExpirationTimeout(tokenMint: string): void {

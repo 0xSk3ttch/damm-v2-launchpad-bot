@@ -1,7 +1,3 @@
-// WebSocket monitor for Pump.fun migrations (graduations).
-// Emits a MigrationEvent with a mint when log hints match.
-// This is WebSocket-only: extracts mint addresses directly from logs.
-
 import {
     Commitment,
     Logs,
@@ -54,7 +50,6 @@ export class MigrationMonitor {
 
         const cb: LogsCallback = async (logs: Logs) => {
             try {
-                // Quick hint filter
                 const joined = (logs.logs ?? []).join(' ').toLowerCase();
                 if (!this.hints.some((h) => joined.includes(h))) return;
 
@@ -62,7 +57,7 @@ export class MigrationMonitor {
                 if (this.isSigSeen(sig)) return;
 
                 const ts = Date.now();
-                const slot = 0; // We don't have slot info from logs, but it's optional
+                const slot = 0;
 
                 // Check if this is a real migration by looking for "Instruction: Migrate"
                 const allLogs = (logs.logs ?? []).join(' ');
@@ -71,7 +66,6 @@ export class MigrationMonitor {
                     return;
                 }
                 
-                // Extract the actual migrated token mint from transaction data
                 const mint = await this.extractMintFromTransaction(sig);
                 if (!mint) {
                     console.log('Could not extract token mint from migration transaction');
@@ -90,7 +84,7 @@ export class MigrationMonitor {
                 this.onMigration({ mint, ts, sig, slot });
                 console.log('Migration detected (WS only):', { mint, sig });
             } catch (e) {
-                // Keep firehose running
+                // keep this shit going
                 console.error('Pump.fun WS log handler error:', e);
             }
         };
@@ -125,8 +119,6 @@ export class MigrationMonitor {
             const WSOL = 'So11111111111111111111111111111111111111112';
             const postBalances = tx.meta.postTokenBalances;
 
-            // Look for non-WSOL tokens that have non-zero balances
-            // These are likely the migrated tokens
             const migratedTokens = postBalances.filter(balance => 
                 balance.mint !== WSOL && 
                 balance.uiTokenAmount.uiAmount !== null &&
@@ -138,7 +130,6 @@ export class MigrationMonitor {
                 return undefined;
             }
             
-            // Take the first migrated token (usually there's only one)
             const migratedToken = migratedTokens[0];
             console.log(`Found migrated token: ${migratedToken.mint}`);
             console.log(`Amount: ${migratedToken.uiTokenAmount.uiAmountString} ${migratedToken.uiTokenAmount.decimals} decimals`);
