@@ -175,16 +175,6 @@ export class DammPoolMonitor {
         console.log(`Removed token ${tokenMint} from pending list`);
       } else {
         console.error(`Failed to add liquidity: ${result.error}`);
-        
-        // Even if liquidity fails, the position might have been created
-        // Send Discord notification anyway since we see position NFTs in logs
-        // console.log('Liquidity failed but position may have been created - sending notification anyway');
-        // try {
-        //   await this.discord.sendPositionCreatedAlert(tokenMint, poolAddress, this.connection);
-        //   console.log('Position created Discord notification sent (despite liquidity failure)');
-        // } catch (error) {
-        //   console.error('Discord notification failed:', error);
-        // }
       }
       
     } catch (error: any) {

@@ -91,9 +91,9 @@ export class DiscordNotifier {
                 throw new Error(`Discord webhook failed: ${response.status} ${response.statusText}`);
             }
 
-            console.log('📢 Discord notification sent successfully');
+            console.log('Discord notification sent successfully');
         } catch (error) {
-            console.error('❌ Failed to send Discord notification:', error);
+            console.error('Failed to send Discord notification:', error);
         }
     }
 
@@ -156,9 +156,9 @@ export class DiscordNotifier {
                 throw new Error(`Discord webhook failed: ${response.status} ${response.statusText}`);
             }
 
-            console.log('📢 Pool found Discord notification sent successfully');
+            console.log('Pool found Discord notification sent successfully');
         } catch (error) {
-            console.error('❌ Failed to send pool found Discord notification:', error);
+            console.error('Failed to send pool found Discord notification:', error);
         }
     }
 
@@ -219,9 +219,9 @@ export class DiscordNotifier {
                 throw new Error(`Discord webhook failed: ${response.status} ${response.statusText}`);
             }
 
-            console.log('📢 Position created Discord notification sent successfully');
+            console.log('Position created Discord notification sent successfully');
         } catch (error) {
-            console.error('❌ Failed to send position created Discord notification:', error);
+            console.error('Failed to send position created Discord notification:', error);
         }
     }
 

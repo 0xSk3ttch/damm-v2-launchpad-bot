@@ -25,7 +25,13 @@
     "monitor": "ts-node src/test.ts websocket",
     "integrated-flow": "ts-node src/test.ts integrated-flow",
     "clean": "rm -rf dist",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "zap-out": "ts-node scripts/utilities/testZapOut.ts",
+    "zap-out:sol": "ts-node -e \"import('./scripts/utilities/zap-out').then(m => m.ZapOut.prototype.closeAllPositionsToSol.call(new m.ZapOut({connection: new (require('@solana/web3.js').Connection)('https://api.mainnet-beta.solana.com'), wallet: require('./src/infra/wallet-provider').WalletProvider.fromPrivateKey(require('dotenv').config().parsed.PRIVATE_KEY), discordWebhookUrl: ''}), 50).then(console.log).catch(console.error))\"",
+    "close-all-damm": "ts-node scripts/position-management/close-all-damm-positions.ts",
+    "list-tokens": "ts-node scripts/token-management/list-wallet-tokens.ts",
+    "swap-tokens": "ts-node scripts/token-management/swap-tokens-to-sol.ts",
+    "monitor-damm": "ts-node scripts/position-management/damm-position-monitor.ts"
   },
   "keywords": [
     "solana",
@@ -40,13 +46,13 @@
   "license": "MIT",
   "dependencies": {
     "@jup-ag/api": "^6.0.44",
-    "@meteora-ag/cp-amm-sdk": "file:damm-v2-sdk-full",
-    "@meteora-ag/zap-sdk": "^1.0.7",
+    "@meteora-ag/cp-amm-sdk": "1.1.1",
     "@solana/spl-token": "^0.3.9",
     "bs58": "^5.0.0",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
+    "@meteora-ag/zap-sdk": "^1.0.8",
     "@solana/web3.js": "^1.98.4",
     "@types/bs58": "^4.0.1",
     "@types/node": "^20.0.0",

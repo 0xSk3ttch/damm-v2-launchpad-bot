@@ -40,16 +40,16 @@ export class DiscordPoolNotifier {
         throw new Error(`Discord webhook failed: ${response.status} ${response.statusText}`);
       }
 
-      console.log('📢 Pool alert Discord notification sent successfully');
+      console.log('Pool alert Discord notification sent successfully');
     } catch (error) {
-      console.error('❌ Failed to send pool alert Discord notification:', error);
+      console.error('Failed to send pool alert Discord notification:', error);
     }
   }
 
   async sendPoolFoundAlert(poolAddress: string, _tokenMint: string, pool: any): Promise<void> {
     const embed: PoolAlertEmbed = {
-      title: '🎉 PARTY TIME! DAMM Pool Found! 🎉',
-      description: 'A new DAMM v2 pool has been created that meets all our criteria!',
+      title: 'DAMM Pool Found! 🎉',
+      description: 'A new DAMM v2 pool has been created that meets all criteria!',
       color: 0x00ff00, // Green
       fields: [
         {
